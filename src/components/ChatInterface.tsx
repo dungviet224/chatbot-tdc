@@ -411,9 +411,6 @@ export default function ChatInterface() {
           aria-label="Nhập câu hỏi"
         >
           <div className={`input-box ${canSend ? 'has-content' : ''}`}>
-            <label htmlFor="chat-input" className="sr-only">
-              Nhập câu hỏi về Sổ Tay Nhân Viên
-            </label>
             <textarea
               ref={textareaRef}
               id="chat-input"
