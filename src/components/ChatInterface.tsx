@@ -200,6 +200,7 @@ export default function ChatInterface() {
         let clientBuffer = '';
         let isDone = false;
         let lastSources: { sectionId: string; sectionName: string }[] = [];
+        let docViewerUrl = 'https://docs.google.com/viewer?url=';
 
         while (!isDone) {
           const { done, value } = await reader.read();
@@ -222,6 +223,9 @@ export default function ChatInterface() {
               }
               if (parsed.sources) {
                 lastSources = parsed.sources;
+              }
+              if (parsed.docViewerUrl) {
+                docViewerUrl = parsed.docViewerUrl;
               }
             } catch { /* skip */ }
           }
@@ -364,7 +368,7 @@ export default function ChatInterface() {
                     __html: formatMessage(msg.content) + (
                       msg.sources && msg.sources.length > 0
                         ? msg.sources.map(s =>
-                            `<a href="/sotaynhanvien.html#${s.sectionId}" target="_blank" rel="noopener noreferrer" class="msg-source-tag" aria-label="Xem nội dung: ${s.sectionName || s.sectionId}">📄</a>`
+                            `<a href="https://docs.google.com/viewer?url=${encodeURIComponent(`${window.location.origin}/api/doc/serve-docx`)}#${s.sectionId}" target="_blank" rel="noopener noreferrer" class="msg-source-tag" aria-label="Xem nội dung: ${s.sectionName || s.sectionId}">📄</a>`
                           ).join('')
                         : ''
                     ),

@@ -22,7 +22,12 @@ export async function POST(req: NextRequest) {
     // Đảm bảo document đã được load & embedded
     await loadAndEmbedDocument();
 
-    // Lấy câu hỏi cuối cùng của user
+    // Lấy base URL từ request headers
+    const proto = req.headers.get('x-forwarded-proto') || 'https';
+    const host = req.headers.get('host') || 'chatbot-tdc.vercel.app';
+    const baseUrl = `${proto}://${host}`;
+    const docxUrl = `${baseUrl}/api/doc/serve-docx`;
+    const docViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(docxUrl)}&embedded=true`;
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
     const userQuery = lastUserMsg?.content ?? '';
 
@@ -86,7 +91,7 @@ export async function POST(req: NextRequest) {
         '- Xưng "tôi", gọi người dùng là "bạn"',
       ]),
       '',
-      'QUAN TRỌNG: Khi trả lời, nếu thông tin lấy từ một phần cụ thể trong tài liệu, hãy thêm tag nguồn ở cuối đoạn tương ứng. Dùng định dạng: 📖 [Tên section](#section-X)',
+      'QUAN TRỌNG: Khi trả lời, nếu thông tin lấy từ một phần cụ thể trong tài liệu, hãy thêm tag nguồn ở cuối đoạn. Dùng định dạng: 📖 [Tên section]',
     ].join('\n');
 
     const requestMessages = [
@@ -118,7 +123,7 @@ export async function POST(req: NextRequest) {
 
     // Stream response về client, kèm sourceLinks ở cuối
     const encoder = new TextEncoder();
-    const sourcePayload = JSON.stringify({ sources: sourceLinks });
+    const sourcePayload = JSON.stringify({ sources: sourceLinks, docViewerUrl });
 
     const readable = new ReadableStream({
       async start(controller) {

@@ -54,6 +54,15 @@ export function getEmbeddingsJsonPath(): string {
   return path.join(getWritableDir(), 'embeddings-data.json');
 }
 
+export function getDocxServeUrl(): string {
+  return '/api/doc/serve-docx';
+}
+
+export function getDocViewerUrl(baseUrl: string): string {
+  const docxUrl = `${baseUrl}/api/doc/serve-docx`;
+  return `https://docs.google.com/viewer?url=${encodeURIComponent(docxUrl)}&embedded=true`;
+}
+
 export function getSourceUrl(): string {
   if (getWritableDir() === path.join(process.cwd(), 'public')) {
     return '/sotaynhanvien.html';
