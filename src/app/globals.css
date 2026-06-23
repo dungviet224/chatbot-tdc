@@ -518,6 +518,7 @@ body {
   color: white; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+  position: relative;
   box-shadow: 0 2px 12px rgba(212, 34, 123, 0.25);
   transition:
     opacity var(--duration-fast) var(--ease-out),
@@ -531,6 +532,7 @@ body {
   background: radial-gradient(circle, rgba(212,34,123,0.2) 0%, transparent 70%);
   opacity: 0;
   transition: opacity var(--duration-base) var(--ease-out);
+  pointer-events: none;
 }
 
 .send-btn:hover:not(:disabled) {
