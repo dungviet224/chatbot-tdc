@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConfig } from '@/lib/cfg-store';
 import { getEmbeddingStatus } from '@/lib/docLoader';
-import { getSourceUrl, getDocxServeUrl, getDocViewerUrl } from '@/lib/file-store';
 import path from 'path';
 import fs from 'fs';
 
@@ -42,7 +41,7 @@ export async function GET(req: NextRequest) {
       docUpdatedAt,
       fileSize,
       docFile: config.docFile || null,
-      docUrl: embedStatus.ready ? getDocViewerUrl(`${req.headers.get('x-forwarded-proto') || 'https'}://${req.headers.get('host') || 'chatbot-tdc.vercel.app'}`) : null,
+      docUrl: embedStatus.ready ? '/api/doc/serve' : null,
     },
   });
 }

@@ -3,6 +3,7 @@ import { saveConfig } from '@/lib/cfg-store';
 import { reembedFromDocx } from '@/lib/reembed';
 import { updateCache } from '@/lib/docLoader';
 import { getDocxPath, getEmbeddingsJsonPath } from '@/lib/file-store';
+import path from 'path';
 import fs from 'fs';
 
 function checkAuth(req: NextRequest): boolean {
@@ -30,6 +31,12 @@ export async function POST(req: NextRequest) {
     const docxPath = getDocxPath();
     const buffer = Buffer.from(await file.arrayBuffer());
     fs.writeFileSync(docxPath, buffer);
+
+    // Also copy to public/ để persist (trên local dev)
+    try {
+      const publicDocx = path.join(process.cwd(), 'public', 'sotaynhanvien.docx');
+      fs.writeFileSync(publicDocx, buffer);
+    } catch { /* Vercel read-only, bỏ qua */ }
 
     // Re-embed
     const result = await reembedFromDocx(docxPath);

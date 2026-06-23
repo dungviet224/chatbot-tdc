@@ -368,7 +368,7 @@ export default function ChatInterface() {
                     __html: formatMessage(msg.content) + (
                       msg.sources && msg.sources.length > 0
                         ? msg.sources.map(s =>
-                            `<a href="https://docs.google.com/viewer?url=${encodeURIComponent(`${window.location.origin}/api/doc/serve-docx`)}#${s.sectionId}" target="_blank" rel="noopener noreferrer" class="msg-source-tag" aria-label="Xem nội dung: ${s.sectionName || s.sectionId}">📄</a>`
+                            `<a href="/api/doc/serve#${s.sectionId}" target="_blank" rel="noopener noreferrer" class="msg-source-tag" aria-label="Xem nội dung: ${s.sectionName || s.sectionId}">📄</a>`
                           ).join('')
                         : ''
                     ),

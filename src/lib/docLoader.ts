@@ -36,13 +36,28 @@ export function updateCache(chunks: EmbeddedChunk[]) {
 // Load embedding data từ file JSON (đã precompute)
 function loadEmbeddingData(): EmbeddedChunk[] | null {
   try {
-    if (!fs.existsSync(DATA_FILE)) return null;
-    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
-    const data = JSON.parse(raw);
-    if (Array.isArray(data) && data.length > 0 && data[0].embedding) {
-      console.log(`[DocLoader] ✅ Loaded ${data.length} precomputed chunks, dim=${data[0].embedding.length}`);
-      return data;
+    // Ưu tiên writable dir (/tmp trên Vercel)
+    const writablePath = getEmbeddingsJsonPath();
+    if (fs.existsSync(writablePath)) {
+      const raw = fs.readFileSync(writablePath, 'utf-8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0 && data[0].embedding) {
+        console.log(`[DocLoader] ✅ Loaded ${data.length} chunks from writable dir`);
+        return data;
+      }
     }
+
+    // Fallback public/ (committed trong git, tồn tại sau deploy)
+    const publicPath = path.join(process.cwd(), 'public', 'embeddings-data.json');
+    if (fs.existsSync(publicPath)) {
+      const raw = fs.readFileSync(publicPath, 'utf-8');
+      const data = JSON.parse(raw);
+      if (Array.isArray(data) && data.length > 0 && data[0].embedding) {
+        console.log(`[DocLoader] ✅ Loaded ${data.length} chunks from public/`);
+        return data;
+      }
+    }
+
     return null;
   } catch (e) {
     console.warn('[DocLoader] Load precomputed data fail:', e);

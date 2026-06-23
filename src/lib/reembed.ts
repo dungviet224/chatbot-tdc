@@ -233,6 +233,12 @@ if (location.hash) {
   fs.writeFileSync(htmlPath, fullHtml, 'utf-8');
   console.log(`[Reembed] ✅ Saved HTML -> ${htmlPath}`);
 
+  // Copy HTML sang public/ để persist qua deploy
+  try {
+    const publicHtml = path.join(process.cwd(), 'public', 'sotaynhanvien.html');
+    fs.writeFileSync(publicHtml, fullHtml, 'utf-8');
+  } catch { /* Vercel read-only */ }
+
   // Chèn marker section vào text trước khi strip HTML
   let sectionedHtml = annotatedHtml;
   // Thay heading có id bằng marker
@@ -283,6 +289,12 @@ if (location.hash) {
 
   const outPath = getEmbeddingsJsonPath();
   fs.writeFileSync(outPath, JSON.stringify(embedded), 'utf-8');
+
+  // Copy JSON sang public/ để persist qua deploy
+  try {
+    const publicJson = path.join(process.cwd(), 'public', 'embeddings-data.json');
+    fs.writeFileSync(publicJson, JSON.stringify(embedded), 'utf-8');
+  } catch { /* Vercel read-only */ }
 
   console.log(`[Reembed] ✅ Saved ${embedded.length} chunks -> ${outPath}`);
 
