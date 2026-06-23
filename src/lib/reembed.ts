@@ -97,7 +97,7 @@ export async function reembedFromPdf(pdfPath: string): Promise<ReembedResult> {
   const embedModel = cfg.embedModel || process.env.EMBED_MODEL || 'openrouter/openai/text-embedding-3-large';
 
   console.log('[Reembed] Parsing PDF...');
-  const pages = parsePdfPages(pdfPath);
+  const pages = await parsePdfPages(pdfPath);
   console.log(`[Reembed] ${pages.length} pages`);
 
   // Chunk mỗi page riêng rẽ, map pageNum → chunks
