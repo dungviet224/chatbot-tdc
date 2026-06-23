@@ -6,6 +6,12 @@
 import path from 'path';
 import fs from 'fs';
 import { getConfig } from './cfg-store';
+import {
+  getDocHtmlPath,
+  getEmbeddingsJsonPath,
+  getWritableDir,
+  getSourceUrl,
+} from './file-store';
 
 const BATCH_SIZE = 20;
 const CHUNK_MAX_SIZE = 450;
@@ -169,7 +175,7 @@ export async function reembedFromDocx(docxPath: string): Promise<ReembedResult> 
   const sectionMap = extractSectionMap(annotatedHtml);
 
   // Ghi file HTML công khai
-  const htmlPath = path.join(process.cwd(), 'public', 'sotaynhanvien.html');
+  const htmlPath = getDocHtmlPath();
   const fullHtml = `<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -246,7 +252,7 @@ if (location.hash) {
     };
   });
 
-  const outPath = path.join(process.cwd(), 'public', 'embeddings-data.json');
+  const outPath = getEmbeddingsJsonPath();
   fs.writeFileSync(outPath, JSON.stringify(embedded), 'utf-8');
 
   console.log(`[Reembed] ✅ Saved ${embedded.length} chunks -> ${outPath}`);

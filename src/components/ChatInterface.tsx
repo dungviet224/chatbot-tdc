@@ -360,30 +360,18 @@ export default function ChatInterface() {
               {msg.content ? (
                 <div
                   className="msg-text"
-                  dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }}
+                  dangerouslySetInnerHTML={{
+                    __html: formatMessage(msg.content) + (
+                      msg.sources && msg.sources.length > 0
+                        ? ' ' + msg.sources.map(s =>
+                            `<a href="/sotaynhanvien.html#${s.sectionId}" target="_blank" rel="noopener noreferrer" class="msg-source-tag" aria-label="Xem nội dung: ${s.sectionName || s.sectionId}">🔗 ${s.sectionName || s.sectionId}</a>`
+                          ).join(' ')
+                        : ''
+                    ),
+                  }}
                 />
               ) : (
                 <TypingDots />
-              )}
-
-              {/* ── Source links ── */}
-              {msg.sources && msg.sources.length > 0 && (
-                <div className="msg-sources">
-                  <span className="msg-sources-label">Nguồn:</span>
-                  {msg.sources.map((s, i) => (
-                    <a
-                      key={i}
-                      href={`/sotaynhanvien.html#${s.sectionId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="msg-source-link"
-                      aria-label={`Xem nội dung: ${s.sectionName || s.sectionId}`}
-                    >
-                      <ExternalLink size={11} aria-hidden="true" />
-                      {s.sectionName || s.sectionId}
-                    </a>
-                  ))}
-                </div>
               )}
 
               <time
