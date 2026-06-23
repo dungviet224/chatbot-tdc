@@ -6,7 +6,7 @@ export async function POST() {
     httpOnly: true,
     sameSite: 'lax',
     maxAge: 0,
-    path: '/cfg',
+    path: '/',
   });
   return res;
 }
