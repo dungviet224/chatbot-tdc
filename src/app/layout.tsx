@@ -1,10 +1,16 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Outfit } from 'next/font/google';
 import './globals.css';
 
 const inter = Inter({
   subsets: ['latin', 'vietnamese'],
   variable: '--font-inter',
+  display: 'swap',
+});
+
+const outfit = Outfit({
+  subsets: ['latin'],
+  variable: '--font-outfit',
   display: 'swap',
 });
 
@@ -22,7 +28,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans`} suppressHydrationWarning>{children}</body>
+      <body className={`${inter.variable} ${outfit.variable} font-sans`} suppressHydrationWarning>{children}</body>
     </html>
   );
 }
