@@ -470,6 +470,7 @@ body {
   height: 1px;
   background: linear-gradient(90deg, transparent 0%, var(--color-brand-lighter) 50%, transparent 100%);
   opacity: 0.5;
+  pointer-events: none;
 }
 
 .input-form { width: 100%; }
