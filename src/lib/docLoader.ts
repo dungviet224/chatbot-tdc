@@ -32,6 +32,12 @@ export function getEmbeddingStatus() {
   };
 }
 
+// Cập nhật cache — gọi sau khi admin upload file mới
+export function updateCache(chunks: EmbeddedChunk[]) {
+  cachedEmbeddedChunks = chunks;
+  console.log(`[DocLoader] Cache updated: ${chunks.length} chunks`);
+}
+
 // Load embedding data từ file JSON (đã precompute)
 function loadEmbeddingData(): EmbeddedChunk[] | null {
   try {

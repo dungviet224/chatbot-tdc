@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loadAndEmbedDocument, retrieveRelevantChunks } from '@/lib/docLoader';
+import { getConfig } from '@/lib/cfg-store';
 
 const API_BASE = process.env.CHAT_API_BASE || 'http://mbasic8.pikamc.vn:25246/v1';
 const API_KEY = process.env.CHAT_API_KEY || 'sk-987312a0a1689afc-m1wrjj-666571e0';
@@ -29,7 +30,6 @@ export async function POST(req: NextRequest) {
       .reduce((acc, chunk) => {
         if (acc.length === 0) return [chunk];
         const last = acc[acc.length - 1];
-        // Nếu chunk liền kề (cùng section, id cách nhau 1) → gộp
         if (chunk.id === last.id + 1) {
           acc[acc.length - 1] = {
             ...last,
@@ -42,6 +42,10 @@ export async function POST(req: NextRequest) {
 
     const contextText = mergedChunks.map((c, i) => `[Đoạn ${i + 1}]\n${c.content}`).join('\n\n---\n\n');
 
+    // Đọc rules từ config (admin có thể chỉnh)
+    const cfg = getConfig();
+    const userRules = cfg.rules || '';
+
     const systemPrompt = [
       'Bạn là trợ lý AI nội bộ của TDConsulting.',
       'Nhiệm vụ DUY NHẤT: trả lời câu hỏi về nội quy, chính sách công ty DỰA TRỰC TIẾP vào dữ liệu bên dưới.',
@@ -50,21 +54,23 @@ export async function POST(req: NextRequest) {
       contextText,
       '=== HẾT DỮ LIỆU ===',
       '',
-      'QUY TẮC BẮT BUỘC:',
-      '1. Thông tin trả lời PHẢI CÓ trong dữ liệu trên. Tuyệt đối không bịa, suy đoán, hay thêm thông tin tự biết.',
-      '2. Được phép suy luận ngữ nghĩa: nếu dữ liệu có "Tổng Giám Đốc" mà hỏi "ai điều hành" → trả lời được. "người đại diện" = "Tổng Giám Đốc". "người đứng đầu" = "Tổng Giám Đốc". Đây không phải bịa, đây là suy luận từ dữ liệu.',
-      '3. Nếu thông tin THỰC SỰ KHÔNG CÓ trong dữ liệu (kể cả suy luận ngữ nghĩa): trả lời "Tôi không tìm thấy thông tin này trong Sổ Tay Nhân Viên. Vui lòng liên hệ HR để được hỗ trợ."',
-      '4. Nếu câu hỏi KHÔNG LIÊN QUAN đến chính sách/nội quy/nhân sự công ty: trả lời "Tôi chỉ hỗ trợ các câu hỏi liên quan đến Sổ Tay Nhân Viên TDConsulting."',
-      '5. Không thay đổi bất kỳ con số, ngày tháng, tỉ lệ nào trong tài liệu.',
+      userRules,
       '',
-      'ĐỊNH DẠNG TRẢ LỜI:',
-      '- Tiếng Việt, ngắn gọn, chuyên nghiệp',
-      '- Dùng **in đậm** cho số liệu quan trọng (ngày, %, deadline)',
-      '- Dùng "- item" khi liệt kê nhiều mục',
-      '- Xưng "tôi", gọi người dùng là "bạn"',
+      ...(userRules ? [] : [
+        'QUY TẮC BẮT BUỘC:',
+        '1. Thông tin trả lời PHẢI CÓ trong dữ liệu trên. Tuyệt đối không bịa, suy đoán, hay thêm thông tin tự biết.',
+        '2. Được phép suy luận ngữ nghĩa: nếu dữ liệu có "Tổng Giám Đốc" mà hỏi "ai điều hành" → trả lời được.',
+        '3. Nếu thông tin THỰC SỰ KHÔNG CÓ trong dữ liệu: trả lời "Tôi không tìm thấy thông tin này trong Sổ Tay Nhân Viên."',
+        '4. Nếu câu hỏi KHÔNG LIÊN QUAN đến chính sách/nội quy/nhân sự: trả lời "Tôi chỉ hỗ trợ các câu hỏi liên quan đến Sổ Tay Nhân Viên TDConsulting."',
+        '5. Không thay đổi bất kỳ con số, ngày tháng, tỉ lệ nào trong tài liệu.',
+        '',
+        'ĐỊNH DẠNG TRẢ LỜI:',
+        '- Tiếng Việt, ngắn gọn, chuyên nghiệp',
+        '- Dùng **in đậm** cho số liệu quan trọng (ngày, %, deadline)',
+        '- Dùng "- item" khi liệt kê nhiều mục',
+        '- Xưng "tôi", gọi người dùng là "bạn"',
+      ]),
     ].join('\n');
-
-
 
     const requestMessages = [
       { role: 'system', content: systemPrompt },
@@ -99,7 +105,7 @@ export async function POST(req: NextRequest) {
       async start(controller) {
         const reader = response.body!.getReader();
         const decoder = new TextDecoder();
-        let buffer = ''; // ← buffer dòng chưa hoàn chỉnh
+        let buffer = '';
 
         try {
           while (true) {
@@ -108,7 +114,6 @@ export async function POST(req: NextRequest) {
 
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
-            // Giữ lại phần chưa hoàn chỉnh (sau \n cuối) trong buffer
             buffer = lines.pop() || '';
 
             for (const line of lines) {

@@ -1,0 +1,12 @@
+import { NextResponse } from 'next/server';
+
+export async function POST() {
+  const res = NextResponse.json({ success: true });
+  res.cookies.set('cfg_token', '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 0,
+    path: '/cfg',
+  });
+  return res;
+}
