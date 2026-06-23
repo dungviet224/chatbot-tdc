@@ -418,7 +418,6 @@ export default function ChatInterface() {
               onChange={(e) => { setInput(e.target.value); autoResize(); }}
               onKeyDown={handleKeyDown}
               placeholder={isInitialized ? 'Hỏi về chính sách, quy định công ty...' : 'Đang khởi tạo, vui lòng chờ...'}
-              disabled={isLoading}
               rows={1}
               aria-label="Câu hỏi"
               aria-describedby="input-hint"
