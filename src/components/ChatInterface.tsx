@@ -363,9 +363,9 @@ export default function ChatInterface() {
                   dangerouslySetInnerHTML={{
                     __html: formatMessage(msg.content) + (
                       msg.sources && msg.sources.length > 0
-                        ? ' ' + msg.sources.map(s =>
-                            `<a href="/sotaynhanvien.html#${s.sectionId}" target="_blank" rel="noopener noreferrer" class="msg-source-tag" aria-label="Xem nội dung: ${s.sectionName || s.sectionId}">🔗 ${s.sectionName || s.sectionId}</a>`
-                          ).join(' ')
+                        ? msg.sources.map(s =>
+                            `<a href="/sotaynhanvien.html#${s.sectionId}" target="_blank" rel="noopener noreferrer" class="msg-source-tag" aria-label="Xem nội dung: ${s.sectionName || s.sectionId}">📄</a>`
+                          ).join('')
                         : ''
                     ),
                   }}
