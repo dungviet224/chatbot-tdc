@@ -115,14 +115,16 @@ function ApiConfigTab({ config, onChange }: { config: ConfigData; onChange: (k: 
           <label htmlFor="cfg-api-base">Base URL</label>
           <input id="cfg-api-base" type="text" value={config.apiBase}
             onChange={e => onChange('apiBase', e.target.value)}
-            placeholder="http://mbasic8.pikamc.vn:25246/v1" />
+            placeholder="http://mbasic8.pikamc.vn:25246/v1"
+            autoComplete="off" />
         </div>
         <div className="cfg-field">
           <label htmlFor="cfg-api-key">API Key</label>
           <div className="cfg-input-with-btn">
             <input id="cfg-api-key" type={showKey ? 'text' : 'password'} value={config.apiKey}
               onChange={e => onChange('apiKey', e.target.value)}
-              placeholder="sk-..." />
+              placeholder="sk-..."
+              autoComplete="new-password" />
             <button type="button" className="cfg-icon-btn" onClick={() => setShowKey(!showKey)}
               aria-label={showKey ? 'Ẩn key' : 'Hiện key'}>
               {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -133,13 +135,15 @@ function ApiConfigTab({ config, onChange }: { config: ConfigData; onChange: (k: 
           <label htmlFor="cfg-embed-model">Embed Model</label>
           <input id="cfg-embed-model" type="text" value={config.embedModel}
             onChange={e => onChange('embedModel', e.target.value)}
-            placeholder="openrouter/openai/text-embedding-3-large" />
+            placeholder="openrouter/openai/text-embedding-3-large"
+            autoComplete="off" />
         </div>
         <div className="cfg-field">
           <label htmlFor="cfg-chat-model">Chat Model</label>
           <input id="cfg-chat-model" type="text" value={config.chatModel}
             onChange={e => onChange('chatModel', e.target.value)}
-            placeholder="oc/deepseek-v4-flash-free" />
+            placeholder="oc/deepseek-v4-flash-free"
+            autoComplete="off" />
         </div>
       </div>
     </div>
