@@ -383,6 +383,64 @@ body {
 }
 .msg-bubble:hover .msg-time { opacity: 0.7; }
 
+/* ── SOURCE LINKS ── */
+.msg-sources {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border);
+}
+
+.msg-bubble.user .msg-sources {
+  border-top-color: rgba(255,255,255,0.2);
+}
+
+.msg-sources-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-muted);
+}
+
+.msg-bubble.user .msg-sources-label {
+  color: rgba(255,255,255,0.5);
+}
+
+.msg-source-link {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: var(--text-xs);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-brand-subtle);
+  border: 1px solid var(--color-border-2);
+  color: var(--color-brand);
+  text-decoration: none;
+  transition: all var(--duration-fast) var(--ease-out);
+  white-space: nowrap;
+}
+
+.msg-bubble.user .msg-source-link {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.9);
+}
+
+.msg-source-link:hover {
+  background: var(--color-brand);
+  border-color: var(--color-brand);
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(212,34,123,0.2);
+}
+
+.msg-bubble.user .msg-source-link:hover {
+  background: white;
+  border-color: white;
+  color: var(--color-brand);
+}
+
 /* ── TYPING ── */
 .typing-dots {
   display: inline-flex; gap: 5px; align-items: center; padding: var(--space-1) 0;

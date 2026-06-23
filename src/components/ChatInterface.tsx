@@ -14,12 +14,14 @@ import {
   Clock,
   Gift,
   Star,
+  ExternalLink,
 } from 'lucide-react';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  sources?: { sectionId: string; sectionName: string }[];
   timestamp: Date;
 }
 
@@ -47,7 +49,7 @@ function TypingDots() {
   );
 }
 
-/** Áp dụng inline markdown: **bold**, *italic*, `code` */
+/** Inline markdown: **bold**, *italic*, `code` */
 function applyInline(text: string): string {
   return text
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -55,7 +57,7 @@ function applyInline(text: string): string {
     .replace(/`([^`]+)`/g, '<code class="msg-code">$1</code>');
 }
 
-/** Chuyển markdown → HTML an toàn để dùng với dangerouslySetInnerHTML */
+/** Markdown → HTML */
 function formatMessage(content: string): string {
   const lines = content.split('\n');
   const output: string[] = [];
@@ -69,35 +71,25 @@ function formatMessage(content: string): string {
 
   for (const line of lines) {
     const trimmed = line.trim();
-
-    // List item: dòng bắt đầu bằng "- " hoặc "• "
     const listMatch = trimmed.match(/^[-•]\s+(.+)/);
     if (listMatch) {
       listBuffer.push(`<li>${applyInline(listMatch[1])}</li>`);
       continue;
     }
-
-    // Dòng trống → flush list + ngắt đoạn
     if (trimmed === '') {
       flushList();
-      // Tránh nhiều <br/> liên tiếp
       if (output.length > 0 && output[output.length - 1] !== '<br/>') {
         output.push('<br/>');
       }
       continue;
     }
-
-    // Dòng thường
     flushList();
     output.push(`<span>${applyInline(trimmed)}</span><br/>`);
   }
 
   flushList();
-
-  // Bỏ <br/> đầu và cuối thừa
   while (output.length > 0 && output[0] === '<br/>') output.shift();
   while (output.length > 0 && output[output.length - 1] === '<br/>') output.pop();
-  // Bỏ <br/> trước <ul>
   return output.join('').replace(/<br\/>(<ul)/g, '$1');
 }
 
@@ -111,7 +103,6 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [initStatus, setInitStatus] = useState('Đang đọc & embedding Sổ Tay Nhân Viên...');
-
   const [hasError, setHasError] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -126,7 +117,7 @@ export default function ChatInterface() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // ── Initialize / embed document ──
+  // ── Initialize ──
   useEffect(() => {
     fetch('/api/init')
       .then((res) => res.json())
@@ -208,6 +199,7 @@ export default function ChatInterface() {
         let accumulated = '';
         let clientBuffer = '';
         let isDone = false;
+        let lastSources: { sectionId: string; sectionName: string }[] = [];
 
         while (!isDone) {
           const { done, value } = await reader.read();
@@ -228,8 +220,20 @@ export default function ChatInterface() {
                   prev.map((m) => m.id === assistantId ? { ...m, content: accumulated } : m)
                 );
               }
-            } catch { /* skip invalid JSON */ }
+              if (parsed.sources) {
+                lastSources = parsed.sources;
+              }
+            } catch { /* skip */ }
           }
+        }
+
+        // Gắn sources vào message
+        if (lastSources.length > 0) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, sources: lastSources } : m
+            )
+          );
         }
 
         if (!accumulated) {
@@ -269,10 +273,8 @@ export default function ChatInterface() {
 
   return (
     <div className="chat-root">
-      {/* Skip to main */}
       <a href="#chat-main" className="skip-link">Bỏ qua điều hướng</a>
 
-      {/* Live region for screen readers */}
       <div
         ref={liveRegionRef}
         role="status"
@@ -310,21 +312,17 @@ export default function ChatInterface() {
           )}
         </div>
 
-        {/* Init progress bar */}
         {!isInitialized && !hasError && (
           <div className="init-strip" role="progressbar" aria-label="Đang khởi tạo">
             <div className="init-track"><div className="init-fill" /></div>
             <span className="init-label">{initStatus}</span>
           </div>
         )}
-
-
       </header>
 
       {/* ── MESSAGES ── */}
       <main id="chat-main" className="chat-messages" role="log" aria-label="Lịch sử cuộc trò chuyện" aria-live="polite">
 
-        {/* Loading screen */}
         {!isInitialized && !hasError && (
           <div className="init-screen" role="status" aria-label="Đang khởi tạo">
             <div className="init-spinner" aria-hidden="true">
@@ -335,7 +333,6 @@ export default function ChatInterface() {
           </div>
         )}
 
-        {/* Error screen */}
         {hasError && (
           <div className="error-screen" role="alert">
             <AlertCircle size={32} aria-hidden="true" />
@@ -350,7 +347,6 @@ export default function ChatInterface() {
           </div>
         )}
 
-        {/* Message list */}
         {messages.map((msg) => (
           <article
             key={msg.id}
@@ -369,6 +365,27 @@ export default function ChatInterface() {
               ) : (
                 <TypingDots />
               )}
+
+              {/* ── Source links ── */}
+              {msg.sources && msg.sources.length > 0 && (
+                <div className="msg-sources">
+                  <span className="msg-sources-label">Nguồn:</span>
+                  {msg.sources.map((s, i) => (
+                    <a
+                      key={i}
+                      href={`/sotaynhanvien.html#${s.sectionId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="msg-source-link"
+                      aria-label={`Xem nội dung: ${s.sectionName || s.sectionId}`}
+                    >
+                      <ExternalLink size={11} aria-hidden="true" />
+                      {s.sectionName || s.sectionId}
+                    </a>
+                  ))}
+                </div>
+              )}
+
               <time
                 className="msg-time"
                 dateTime={msg.timestamp.toISOString()}
@@ -380,7 +397,6 @@ export default function ChatInterface() {
           </article>
         ))}
 
-        {/* Suggested questions */}
         {messages.length === 1 && isInitialized && (
           <section className="suggestions" aria-label="Câu hỏi gợi ý">
             <div className="suggestions-grid">

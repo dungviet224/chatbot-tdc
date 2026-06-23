@@ -6,6 +6,11 @@ const API_BASE = process.env.CHAT_API_BASE || 'http://mbasic8.pikamc.vn:25246/v1
 const API_KEY = process.env.CHAT_API_KEY || 'sk-987312a0a1689afc-m1wrjj-666571e0';
 const MODEL = process.env.CHAT_MODEL || 'oc/deepseek-v4-flash-free';
 
+interface SourceLink {
+  sectionId: string;
+  sectionName: string;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { messages } = await req.json();
@@ -23,6 +28,16 @@ export async function POST(req: NextRequest) {
 
     // Lấy chunks liên quan bằng embedding + cosine similarity
     const relevantChunks = await retrieveRelevantChunks(userQuery, 10);
+
+    // Gom source links theo sectionId (dedup)
+    const sourceLinks: SourceLink[] = [];
+    const seenSections = new Set<string>();
+    for (const c of relevantChunks) {
+      if (c.sectionId && !seenSections.has(c.sectionId)) {
+        seenSections.add(c.sectionId);
+        sourceLinks.push({ sectionId: c.sectionId, sectionName: c.sectionName || '' });
+      }
+    }
 
     // Merge chunks liền kề để tránh đứt đoạn nội dung
     const mergedChunks = relevantChunks
@@ -42,7 +57,7 @@ export async function POST(req: NextRequest) {
 
     const contextText = mergedChunks.map((c, i) => `[Đoạn ${i + 1}]\n${c.content}`).join('\n\n---\n\n');
 
-    // Đọc rules từ config (admin có thể chỉnh)
+    // Đọc rules từ config
     const cfg = getConfig();
     const userRules = cfg.rules || '';
 
@@ -70,6 +85,8 @@ export async function POST(req: NextRequest) {
         '- Dùng "- item" khi liệt kê nhiều mục',
         '- Xưng "tôi", gọi người dùng là "bạn"',
       ]),
+      '',
+      'QUAN TRỌNG: Khi trả lời, nếu thông tin lấy từ một phần cụ thể trong tài liệu, hãy thêm tag nguồn ở cuối đoạn tương ứng. Dùng định dạng: 📖 [Tên section](#section-X)',
     ].join('\n');
 
     const requestMessages = [
@@ -99,8 +116,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Stream response về client
+    // Stream response về client, kèm sourceLinks ở cuối
     const encoder = new TextEncoder();
+    const sourcePayload = JSON.stringify({ sources: sourceLinks });
+
     const readable = new ReadableStream({
       async start(controller) {
         const reader = response.body!.getReader();
@@ -122,6 +141,10 @@ export async function POST(req: NextRequest) {
 
               const data = trimmed.slice(6).trim();
               if (data === '[DONE]') {
+                // Gửi sources trước [DONE]
+                if (sourceLinks.length > 0) {
+                  controller.enqueue(encoder.encode(`data: ${sourcePayload}\n\n`));
+                }
                 controller.enqueue(encoder.encode('data: [DONE]\n\n'));
                 continue;
               }
@@ -134,7 +157,7 @@ export async function POST(req: NextRequest) {
                   );
                 }
               } catch {
-                // bỏ qua dòng JSON lỗi
+                // skip
               }
             }
           }
