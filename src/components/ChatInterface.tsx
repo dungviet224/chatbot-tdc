@@ -163,7 +163,7 @@ export default function ChatInterface() {
   // ── Send message ──
   const sendMessage = useCallback(
     async (content: string) => {
-      if (!content.trim() || isLoading || !isInitialized) return;
+      if (!content.trim() || isLoading) return;
 
       const userMessage: Message = {
         id: `user-${Date.now()}`,
@@ -265,7 +265,7 @@ export default function ChatInterface() {
     }
   };
 
-  const canSend = input.trim().length > 0 && !isLoading && isInitialized;
+  const canSend = input.trim().length > 0 && !isLoading;
 
   return (
     <div className="chat-root">
@@ -410,7 +410,7 @@ export default function ChatInterface() {
           onSubmit={(e) => { e.preventDefault(); sendMessage(input); }}
           aria-label="Nhập câu hỏi"
         >
-          <div className={`input-box ${canSend ? 'has-content' : ''} ${!isInitialized ? 'disabled' : ''}`}>
+          <div className={`input-box ${canSend ? 'has-content' : ''}`}>
             <label htmlFor="chat-input" className="sr-only">
               Nhập câu hỏi về Sổ Tay Nhân Viên
             </label>
@@ -421,7 +421,7 @@ export default function ChatInterface() {
               onChange={(e) => { setInput(e.target.value); autoResize(); }}
               onKeyDown={handleKeyDown}
               placeholder={isInitialized ? 'Hỏi về chính sách, quy định công ty...' : 'Đang khởi tạo, vui lòng chờ...'}
-              disabled={!isInitialized || isLoading}
+              disabled={isLoading}
               rows={1}
               aria-label="Câu hỏi"
               aria-describedby="input-hint"
@@ -431,7 +431,7 @@ export default function ChatInterface() {
             <button
               type="submit"
               className="send-btn"
-              disabled={!canSend}
+              disabled={isLoading}
               aria-label={isLoading ? 'Đang xử lý...' : 'Gửi câu hỏi'}
             >
               {isLoading

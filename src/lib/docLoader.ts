@@ -1,15 +1,14 @@
 /**
- * Document loader + chunker + embedding pipeline
- * Đọc SoTayNhanVien.docx → extract → chunk → embed (API) → cache
+ * Document loader — load precomputed embeddings từ JSON file
+ * Được sinh bởi `scripts/precompute-embeddings.js` lúc build
+ * Không cần parse DOCX hay gọi API embedding ở runtime
  */
 
-import mammoth from 'mammoth';
 import path from 'path';
 import fs from 'fs';
 import {
   EmbeddedChunk,
   getNeuralEmbedding,
-  getNeuralEmbeddingBatch,
   retrieveByEmbedding,
 } from './embeddings';
 
@@ -17,7 +16,9 @@ export type { EmbeddedChunk };
 
 // In-memory cache
 let cachedEmbeddedChunks: EmbeddedChunk[] | null = null;
-let isEmbedding = false;
+
+// Precomputed data path
+const DATA_FILE = path.join(process.cwd(), 'public', 'embeddings-data.json');
 
 export function getCachedChunks(): EmbeddedChunk[] | null {
   return cachedEmbeddedChunks;
@@ -32,121 +33,25 @@ export function getEmbeddingStatus() {
   };
 }
 
-// Extract text từ DOCX
-async function extractDocxText(): Promise<string> {
-  const filePath = path.join(process.cwd(), 'public', 'sotaynhanvien.docx');
-  if (!fs.existsSync(filePath)) {
-    throw new Error(`Không tìm thấy file: ${filePath}`);
+// Load embedding data từ file JSON (đã precompute)
+function loadEmbeddingData(): EmbeddedChunk[] | null {
+  try {
+    if (!fs.existsSync(DATA_FILE)) return null;
+    const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+    const data = JSON.parse(raw);
+    // Validate
+    if (Array.isArray(data) && data.length > 0 && data[0].embedding) {
+      console.log(`[DocLoader] ✅ Loaded ${data.length} precomputed chunks, dim=${data[0].embedding.length}`);
+      return data;
+    }
+    return null;
+  } catch (e) {
+    console.warn('[DocLoader] Load precomputed data fail:', e);
+    return null;
   }
-
-  const { value: html } = await mammoth.convertToHtml({ path: filePath });
-
-  const text = html
-    .replace(/<tr[^>]*>/gi, '\n')
-    .replace(/<\/tr>/gi, '')
-    .replace(/<t[dh][^>]*>/gi, '')
-    .replace(/<\/t[dh]>/gi, ' | ')
-    .replace(/<h([1-6])[^>]*>/gi, '\n\n### ')
-    .replace(/<\/h[1-6]>/gi, ' ###\n')
-    .replace(/<li[^>]*>/gi, '\n- ')
-    .replace(/<\/li>/gi, '')
-    .replace(/<p[^>]*>/gi, '\n')
-    .replace(/<\/p>/gi, '\n')
-    .replace(/<strong[^>]*>/gi, '**')
-    .replace(/<\/strong>/gi, '**')
-    .replace(/<em[^>]*>/gi, '')
-    .replace(/<\/em>/gi, '')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)))
-    .replace(/(\|\s*){3,}/g, ' | ')
-    .replace(/\|\s*\n/g, '\n')
-    .replace(/\n\s*\|\s*\n/g, '\n')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{4,}/g, '\n\n\n')
-    .trim();
-
-  return text;
 }
 
-// Chunk text theo sections
-function chunkTextBySections(fullText: string, maxChunkSize = 450, overlap = 80): string[] {
-  const lines = fullText.split('\n').map(s => s.trimEnd());
-  const sections: { heading: string; content: string[] }[] = [];
-  let currentHeading = '';
-  let currentLines: string[] = [];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-
-    const isHeading =
-      /^###/.test(trimmed) ||
-      /^PHẦN\s+\d+/i.test(trimmed) ||
-      /^\d+\.\d+[\.\s]/.test(trimmed) ||
-      /^[A-ZĐÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬ\s]{10,}$/.test(trimmed);
-
-    if (isHeading && currentLines.length > 0) {
-      sections.push({ heading: currentHeading, content: currentLines });
-      currentLines = [];
-      currentHeading = trimmed.replace(/^###\s*/, '').replace(/\s*###$/, '').trim();
-    } else if (isHeading) {
-      currentHeading = trimmed.replace(/^###\s*/, '').replace(/\s*###$/, '').trim();
-    } else {
-      currentLines.push(trimmed);
-    }
-  }
-  if (currentLines.length > 0) {
-    sections.push({ heading: currentHeading, content: currentLines });
-  }
-
-  const chunks: string[] = [];
-
-  for (const section of sections) {
-    const sectionPrefix = section.heading ? `[${section.heading}]\n` : '';
-    const bodyText = section.content.join('\n').trim();
-    if (!bodyText) continue;
-
-    const fullChunk = (sectionPrefix + bodyText).trim();
-    if (fullChunk.length <= maxChunkSize) {
-      chunks.push(fullChunk);
-      continue;
-    }
-
-    const paragraphs = bodyText.split(/\n{2,}/).filter(p => p.trim().length > 10);
-    let buffer = sectionPrefix;
-
-    for (const para of paragraphs) {
-      const candidate = buffer + (buffer === sectionPrefix ? '' : '\n\n') + para;
-      if (candidate.length >= maxChunkSize && buffer !== sectionPrefix) {
-        chunks.push(buffer.trim());
-        const lastWords = buffer.split(/\s+/).slice(-Math.ceil(overlap / 5)).join(' ');
-        buffer = sectionPrefix + lastWords + '\n\n' + para;
-      } else {
-        buffer = candidate;
-      }
-    }
-
-    if (buffer.trim() && buffer.trim() !== sectionPrefix.trim()) {
-      chunks.push(buffer.trim());
-    }
-  }
-
-  const seen = new Set<string>();
-  return chunks
-    .filter(c => c.trim().length > 30)
-    .filter(c => {
-      const key = c.substring(0, 50);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}
-
-// Main: Load + Embed (API)
+// Main: Load từ JSON (cực nhanh, ko gọi API)
 export async function loadAndEmbedDocument(): Promise<{
   chunks: EmbeddedChunk[];
   embeddingType: 'neural';
@@ -160,63 +65,89 @@ export async function loadAndEmbedDocument(): Promise<{
     };
   }
 
-  if (isEmbedding) {
-    while (isEmbedding) {
-      await new Promise((r) => setTimeout(r, 200));
-    }
-    return {
-      chunks: cachedEmbeddedChunks!,
-      embeddingType: 'neural',
-      totalChunks: cachedEmbeddedChunks!.length,
-    };
-  }
-
-  isEmbedding = true;
-  console.log('[DocLoader] Bắt đầu đọc và embedding Sổ Tay Nhân Viên...');
-
-  try {
-    const fullText = await extractDocxText();
-    console.log(`[DocLoader] Extracted: ${fullText.length} ký tự`);
-
-    const rawChunks = chunkTextBySections(fullText, 450, 80);
-    console.log(`[DocLoader] Tạo được ${rawChunks.length} chunks`);
-    rawChunks.forEach((c, i) => {
-      console.log(`  Chunk ${i + 1} (${c.length} chars): ${c.substring(0, 60).replace(/\n/g, ' ')}...`);
-    });
-
-    // Embed via API (batch, text-embedding-3-large)
-    console.log('[DocLoader] Embedding via API (batch)...');
-    const embedded: EmbeddedChunk[] = [];
-
-    // Tạo mảng index gốc + text để batch
-    const embedInputs = rawChunks.map((c) => c);
-    const vectors = await getNeuralEmbeddingBatch(embedInputs);
-
-    for (let i = 0; i < rawChunks.length; i++) {
-      const vec = vectors[i];
-      if (!vec) {
-        throw new Error(`Embedding failed at chunk ${i}`);
-      }
-      embedded.push({
-        id: i,
-        content: rawChunks[i],
-        source: 'SoTayNhanVien_TDConsulting',
-        embedding: vec,
-        embeddingType: 'neural',
-      });
-    }
-
-    cachedEmbeddedChunks = embedded;
-    console.log(`[DocLoader] ✅ Xong! ${embedded.length} chunks, dim=${embedded[0]?.embedding.length ?? 0}`);
-
+  // Try load precomputed
+  const precomputed = loadEmbeddingData();
+  if (precomputed) {
+    cachedEmbeddedChunks = precomputed;
     return {
       chunks: cachedEmbeddedChunks,
       embeddingType: 'neural',
       totalChunks: cachedEmbeddedChunks.length,
     };
-  } finally {
-    isEmbedding = false;
   }
+
+  // Fallback: nếu ko có file precompute (dev), parse DOCX + gọi API
+  const { default: mammoth } = await import('mammoth');
+  console.log('[DocLoader] No precomputed data, parsing DOCX + API embedding...');
+
+  const docxPath = path.join(process.cwd(), 'public', 'sotaynhanvien.docx');
+  const { value: html } = await mammoth.convertToHtml({ path: docxPath });
+
+  const text = html
+    .replace(/<tr[^>]*>/gi, '\n').replace(/<\/tr>/gi, '')
+    .replace(/<t[dh][^>]*>/gi, '').replace(/<\/t[dh]>/gi, ' | ')
+    .replace(/<h([1-6])[^>]*>/gi, '\n\n### ').replace(/<\/h[1-6]>/gi, ' ###\n')
+    .replace(/<li[^>]*>/gi, '\n- ').replace(/<\/li>/gi, '')
+    .replace(/<p[^>]*>/gi, '\n').replace(/<\/p>/gi, '\n')
+    .replace(/<strong[^>]*>/gi, '**').replace(/<\/strong>/gi, '**')
+    .replace(/<em[^>]*>/gi, '').replace(/<\/em>/gi, '')
+    .replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)))
+    .replace(/(\|\s*){3,}/g, ' | ').replace(/\|\s*\n/g, '\n')
+    .replace(/\n\s*\|\s*\n/g, '\n').replace(/[ \t]+/g, ' ')
+    .replace(/\n{4,}/g, '\n\n\n').trim();
+
+  function chunkText(fullText: string, maxSize = 450, overlap = 80): string[] {
+    const lines = fullText.split('\n').map(s => s.trimEnd());
+    const sections: { heading: string; content: string[] }[] = [];
+    let h = '', cl: string[] = [];
+    for (const line of lines) {
+      const t = line.trim();
+      if (!t) continue;
+      const isH = /^###/.test(t) || /^PHẦN\s+\d+/i.test(t) || /^\d+\.\d+[\.\s]/.test(t)
+        || /^[A-ZĐÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬ\s]{10,}$/.test(t);
+      if (isH && cl.length > 0) { sections.push({ heading: h, content: cl }); cl = []; h = t.replace(/^###\s*/, '').replace(/\s*###$/, '').trim(); }
+      else if (isH) { h = t.replace(/^###\s*/, '').replace(/\s*###$/, '').trim(); }
+      else cl.push(t);
+    }
+    if (cl.length > 0) sections.push({ heading: h, content: cl });
+
+    const chunks: string[] = [];
+    for (const s of sections) {
+      const prefix = s.heading ? `[${s.heading}]\n` : '';
+      const body = s.content.join('\n').trim();
+      if (!body) continue;
+      const full = (prefix + body).trim();
+      if (full.length <= maxSize) { chunks.push(full); continue; }
+      const paras = body.split(/\n{2,}/).filter(p => p.trim().length > 10);
+      let buf = prefix;
+      for (const p of paras) {
+        const c = buf + (buf === prefix ? '' : '\n\n') + p;
+        if (c.length >= maxSize && buf !== prefix) { chunks.push(buf.trim()); buf = prefix + buf.split(/\s+/).slice(-Math.ceil(overlap / 5)).join(' ') + '\n\n' + p; }
+        else buf = c;
+      }
+      if (buf.trim() && buf.trim() !== prefix.trim()) chunks.push(buf.trim());
+    }
+    const seen = new Set<string>();
+    return chunks.filter(c => c.trim().length > 30).filter(c => { const k = c.substring(0, 50); if (seen.has(k)) return false; seen.add(k); return true; });
+  }
+
+  const rawChunks = chunkText(text, 450, 80);
+  console.log(`[DocLoader] ${rawChunks.length} chunks`);
+
+  // Embed via API
+  const { getNeuralEmbeddingBatch: batchEmbed } = await import('./embeddings');
+  const vectors = await batchEmbed(rawChunks);
+  const embedded: EmbeddedChunk[] = [];
+  for (let i = 0; i < rawChunks.length; i++) {
+    if (!vectors[i]) throw new Error(`Embedding failed at chunk ${i}`);
+    embedded.push({ id: i, content: rawChunks[i], source: 'SoTayNhanVien_TDConsulting', embedding: vectors[i]!, embeddingType: 'neural' });
+  }
+
+  cachedEmbeddedChunks = embedded;
+  console.log(`[DocLoader] ✅ ${embedded.length} chunks, dim=${embedded[0]?.embedding.length}`);
+  return { chunks: cachedEmbeddedChunks, embeddingType: 'neural', totalChunks: cachedEmbeddedChunks.length };
 }
 
 // Retrieve bằng semantic embedding

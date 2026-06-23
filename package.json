@@ -3,8 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "precompute": "node scripts/precompute-embeddings.js",
     "build": "next build",
+    "dev": "next dev",
     "start": "next start",
     "lint": "eslint"
   },
