@@ -124,7 +124,7 @@ export interface SectionMeta {
 const HTML_STYLE = `
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
   font-size: 16px; line-height: 1.7;
   color: #1c0a13; background: #fcf2f7;
   max-width: 860px; margin: 0 auto; padding: 32px 20px;
@@ -138,6 +138,35 @@ ul, ol { margin: 8px 0 12px 24px; }
 li { margin-bottom: 4px; }
 strong { color: #d4227b; }
 hr { border: none; border-top: 1px solid #f5a3cc; margin: 32px 0; }
+
+/* ── Tables ── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+}
+th, td {
+  border: 1px solid #d4a0b8;
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: linear-gradient(135deg, #d4227b, #e8559f);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+tr:nth-child(even) td {
+  background: rgba(212, 34, 123, 0.04);
+}
+tr:hover td {
+  background: rgba(212, 34, 123, 0.08);
+}
+
 .highlight {
   animation: hl-fade 3s ease-out forwards;
   background: linear-gradient(120deg, rgba(212,34,123,0.12) 0%, transparent 100%);
