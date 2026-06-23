@@ -1,9 +1,3 @@
-/**
- * Document loader — load precomputed embeddings từ JSON file
- * Được sinh bởi `scripts/precompute-embeddings.js` lúc build
- * Không cần parse DOCX hay gọi API embedding ở runtime
- */
-
 import path from 'path';
 import fs from 'fs';
 import {
@@ -11,14 +5,15 @@ import {
   getEmbedding,
   retrieveByEmbedding,
 } from './embeddings';
+import { getEmbeddingsJsonPath } from './file-store';
 
 export type { EmbeddedChunk };
 
 // In-memory cache
 let cachedEmbeddedChunks: EmbeddedChunk[] | null = null;
 
-// Precomputed data path
-const DATA_FILE = path.join(process.cwd(), 'public', 'embeddings-data.json');
+// Precomputed data path (use writable dir)
+const DATA_FILE = getEmbeddingsJsonPath();
 
 export function getCachedChunks(): EmbeddedChunk[] | null {
   return cachedEmbeddedChunks;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { saveConfig } from '@/lib/cfg-store';
 import { reembedFromDocx } from '@/lib/reembed';
 import { updateCache } from '@/lib/docLoader';
-import path from 'path';
+import { getDocxPath, getEmbeddingsJsonPath } from '@/lib/file-store';
 import fs from 'fs';
 
 function checkAuth(req: NextRequest): boolean {
@@ -26,9 +26,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Chỉ hỗ trợ file .docx' }, { status: 400 });
     }
 
-    // Save file
-    const uploadDir = path.join(process.cwd(), 'public');
-    const docxPath = path.join(uploadDir, 'sotaynhanvien.docx');
+    // Save file to writable directory
+    const docxPath = getDocxPath();
     const buffer = Buffer.from(await file.arrayBuffer());
     fs.writeFileSync(docxPath, buffer);
 
@@ -42,7 +41,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Đọc file JSON vừa ghi và cập nhật in-memory cache
-    const raw = fs.readFileSync(path.join(process.cwd(), 'public', 'embeddings-data.json'), 'utf-8');
+    const raw = fs.readFileSync(getEmbeddingsJsonPath(), 'utf-8');
     const freshChunks = JSON.parse(raw);
     updateCache(freshChunks);
 
