@@ -1,11 +1,11 @@
 /**
  * Config store — save/load app config từ JSON file
- * File: config/app-config.json (project root)
- * Chỉ dùng được ở self-host, Vercel dùng env vars
+ * Lưu trong writable dir (tự động /tmp trên Vercel)
  */
 
 import path from 'path';
 import fs from 'fs';
+import { getWritableDir } from './file-store';
 
 export interface AppConfig {
   // API
@@ -21,14 +21,11 @@ export interface AppConfig {
   docUpdatedAt?: string;
 }
 
-const CONFIG_DIR = path.join(process.cwd(), 'config');
-const CONFIG_FILE = path.join(CONFIG_DIR, 'app-config.json');
-
-function ensureDir() {
-  if (!fs.existsSync(CONFIG_DIR)) {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
-  }
+function getConfigDir(): string {
+  return getWritableDir();
 }
+
+const CONFIG_FILE = path.join(getWritableDir(), 'app-config.json');
 
 export function getConfig(): AppConfig {
   try {
@@ -41,7 +38,6 @@ export function getConfig(): AppConfig {
 }
 
 export function saveConfig(partial: Partial<AppConfig>): AppConfig {
-  ensureDir();
   const current = getConfig();
   const next = { ...current, ...partial, updatedAt: new Date().toISOString() };
   fs.writeFileSync(CONFIG_FILE, JSON.stringify(next, null, 2), 'utf-8');
