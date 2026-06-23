@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConfig } from '@/lib/cfg-store';
 import { getEmbeddingStatus } from '@/lib/docLoader';
+import { getSourceUrl } from '@/lib/file-store';
 import path from 'path';
 import fs from 'fs';
 
@@ -40,6 +41,8 @@ export async function GET(req: NextRequest) {
       totalChunks: embedStatus.totalChunks,
       docUpdatedAt,
       fileSize,
+      docFile: config.docFile || null,
+      docUrl: embedStatus.ready ? getSourceUrl() : null,
     },
   });
 }

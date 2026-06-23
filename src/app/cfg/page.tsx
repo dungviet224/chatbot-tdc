@@ -29,6 +29,8 @@ interface EmbedData {
   totalChunks: number;
   docUpdatedAt: string | null;
   fileSize: number;
+  docFile: string | null;
+  docUrl: string | null;
 }
 
 // ── Login ──
@@ -202,8 +204,16 @@ function DocumentsTab({ embed, onUpload }: { embed: EmbedData; onUpload: (f: Fil
           </div>
           {embed.ready && (
             <>
-              <div className="cfg-stat"><span className="cfg-stat-label">Số chunks</span>
-                <span className="cfg-stat-val">{embed.totalChunks}</span>
+              <div className="cfg-stat"><span className="cfg-stat-label">Tên file</span>
+                <span className="cfg-stat-val">
+                  {embed.docUrl ? (
+                    <a href={embed.docUrl} target="_blank" rel="noopener noreferrer" className="cfg-doc-link">
+                      {embed.docFile || 'sotaynhanvien.docx'}
+                    </a>
+                  ) : (
+                    embed.docFile || 'sotaynhanvien.docx'
+                  )}
+                </span>
               </div>
               <div className="cfg-stat"><span className="cfg-stat-label">Dung lượng</span>
                 <span className="cfg-stat-val">{embed.fileSize > 0 ? `${(embed.fileSize / 1024).toFixed(0)} KB` : '-'}</span>
@@ -244,7 +254,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [config, setConfig] = useState<ConfigData>({
     apiBase: '', apiKey: '', embedModel: '', chatModel: '', rules: '',
   });
-  const [embed, setEmbed] = useState<EmbedData>({ ready: false, totalChunks: 0, docUpdatedAt: null, fileSize: 0 });
+  const [embed, setEmbed] = useState<EmbedData>({ ready: false, totalChunks: 0, docUpdatedAt: null, fileSize: 0, docFile: null, docUrl: null });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [loading, setLoading] = useState(true);

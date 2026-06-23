@@ -976,6 +976,17 @@ body {
 .cfg-stat-ok { color: #059669; }
 .cfg-stat-na { color: var(--color-text-muted); }
 
+.cfg-doc-link {
+  color: var(--color-brand);
+  text-decoration: none;
+  font-weight: 500;
+  transition: all var(--duration-base) var(--ease-out);
+}
+.cfg-doc-link:hover {
+  color: var(--color-brand-light);
+  text-decoration: underline;
+}
+
 /* ── Upload ── */
 .cfg-upload-area {
   display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3);
