@@ -32,7 +32,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 // ========================
-//  Batch Embedding via API
+//  Embedding via API
 // ========================
 async function callEmbedAPI(texts: string[]): Promise<number[][] | null> {
   try {
@@ -70,12 +70,12 @@ async function callEmbedAPI(texts: string[]): Promise<number[][] | null> {
   }
 }
 
-export async function getNeuralEmbedding(text: string): Promise<number[] | null> {
+export async function getEmbedding(text: string): Promise<number[] | null> {
   const result = await callEmbedAPI([text]);
   return result?.[0] ?? null;
 }
 
-export async function getNeuralEmbeddingBatch(texts: string[]): Promise<(number[] | null)[]> {
+export async function getEmbeddingBatch(texts: string[]): Promise<(number[] | null)[]> {
   const result: (number[] | null)[] = [];
 
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
@@ -84,7 +84,6 @@ export async function getNeuralEmbeddingBatch(texts: string[]): Promise<(number[
     if (embeddings) {
       result.push(...embeddings);
     } else {
-      // fallback: embed từng cái nếu batch fail
       console.warn('[Embedding] Batch fail, fallback sequential');
       for (const t of batch) {
         const v = await callEmbedAPI([t]);
@@ -113,13 +112,4 @@ export function retrieveByEmbedding(
     .slice(0, topK);
 
   return scored.map((s) => s.chunk);
-}
-
-// ========================
-//  Compat wrapper
-// ========================
-export async function embedText(text: string): Promise<{ vec: number[]; type: 'neural' }> {
-  const vec = await getNeuralEmbedding(text);
-  if (vec) return { vec, type: 'neural' };
-  throw new Error('Embedding API không khả dụng');
 }
