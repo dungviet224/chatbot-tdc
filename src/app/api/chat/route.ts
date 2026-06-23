@@ -7,7 +7,7 @@ const API_KEY = process.env.CHAT_API_KEY || 'sk-987312a0a1689afc-m1wrjj-666571e0
 const MODEL = process.env.CHAT_MODEL || 'oc/deepseek-v4-flash-free';
 
 interface SourceLink {
-  sectionId: string;
+  sourcePage: number;
   sectionName: string;
 }
 
@@ -26,21 +26,21 @@ export async function POST(req: NextRequest) {
     const proto = req.headers.get('x-forwarded-proto') || 'https';
     const host = req.headers.get('host') || 'chatbot-tdc.vercel.app';
     const baseUrl = `${proto}://${host}`;
-    const docxUrl = `${baseUrl}/api/doc/serve-docx`;
-    const docViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(docxUrl)}&embedded=true`;
+    const pdfUrl = `${baseUrl}/api/doc/serve-pdf`;
+    const docViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(pdfUrl)}&embedded=true`;
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
     const userQuery = lastUserMsg?.content ?? '';
 
     // Lấy chunks liên quan bằng embedding + cosine similarity
     const relevantChunks = await retrieveRelevantChunks(userQuery, 10);
 
-    // Gom source links theo sectionId (dedup)
+    // Gom source links theo page (dedup)
     const sourceLinks: SourceLink[] = [];
-    const seenSections = new Set<string>();
+    const seenPages = new Set<number>();
     for (const c of relevantChunks) {
-      if (c.sectionId && !seenSections.has(c.sectionId)) {
-        seenSections.add(c.sectionId);
-        sourceLinks.push({ sectionId: c.sectionId, sectionName: c.sectionName || '' });
+      if (c.sourcePage && !seenPages.has(c.sourcePage)) {
+        seenPages.add(c.sourcePage);
+        sourceLinks.push({ sourcePage: c.sourcePage, sectionName: c.sourcePage ? `Trang ${c.sourcePage}` : '' });
       }
     }
 
@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
         '- Xưng "tôi", gọi người dùng là "bạn"',
       ]),
       '',
-      'QUAN TRỌNG: Khi trả lời, nếu thông tin lấy từ một phần cụ thể trong tài liệu, hãy thêm tag nguồn ở cuối đoạn. Dùng định dạng: 📖 [Tên section]',
+      'QUAN TRỌNG: Khi trả lời, nếu thông tin lấy từ trang cụ thể trong tài liệu, hãy thêm tag nguồn ở cuối đoạn. Dùng định dạng: 📖 [Tên nội dung - Trang X]',
     ].join('\n');
 
     const requestMessages = [
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
 
     // Stream response về client, kèm sourceLinks ở cuối
     const encoder = new TextEncoder();
-    const sourcePayload = JSON.stringify({ sources: sourceLinks, docViewerUrl });
+    const sourcePayload = JSON.stringify({ sources: sourceLinks });
 
     const readable = new ReadableStream({
       async start(controller) {

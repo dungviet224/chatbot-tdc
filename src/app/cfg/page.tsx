@@ -208,10 +208,10 @@ function DocumentsTab({ embed, onUpload }: { embed: EmbedData; onUpload: (f: Fil
                 <span className="cfg-stat-val">
                   {embed.docUrl ? (
                     <a href={embed.docUrl} target="_blank" rel="noopener noreferrer" className="cfg-doc-link">
-                      {embed.docFile || 'sotaynhanvien.docx'}
+                      {embed.docFile || 'sotaynhanvien.pdf'}
                     </a>
                   ) : (
-                    embed.docFile || 'sotaynhanvien.docx'
+                    embed.docFile || 'sotaynhanvien.pdf'
                   )}
                 </span>
               </div>
@@ -230,13 +230,13 @@ function DocumentsTab({ embed, onUpload }: { embed: EmbedData; onUpload: (f: Fil
         <div className="cfg-upload-area">
           <label className="cfg-upload-btn" htmlFor="cfg-file-upload">
             {uploading ? <Loader2 size={18} className="spin" /> : <Upload size={18} />}
-            {uploading ? 'Đang xử lý...' : 'Chọn file .docx để upload'}
+            {uploading ? 'Đang xử lý...' : 'Chọn file .pdf để upload'}
           </label>
           <input
             ref={fileRef}
             id="cfg-file-upload"
             type="file"
-            accept=".docx"
+            accept=".pdf"
             onChange={handleFile}
             disabled={uploading}
             className="cfg-hidden-input"

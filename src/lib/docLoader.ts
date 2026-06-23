@@ -12,9 +12,6 @@ export type { EmbeddedChunk };
 // In-memory cache
 let cachedEmbeddedChunks: EmbeddedChunk[] | null = null;
 
-// Precomputed data path (use writable dir)
-const DATA_FILE = getEmbeddingsJsonPath();
-
 export function getCachedChunks(): EmbeddedChunk[] | null {
   return cachedEmbeddedChunks;
 }

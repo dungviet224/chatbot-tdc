@@ -21,7 +21,7 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  sources?: { sectionId: string; sectionName: string }[];
+  sources?: { sourcePage: number; sectionName: string }[];
   timestamp: Date;
 }
 
@@ -199,7 +199,7 @@ export default function ChatInterface() {
         let accumulated = '';
         let clientBuffer = '';
         let isDone = false;
-        let lastSources: { sectionId: string; sectionName: string }[] = [];
+        let lastSources: { sourcePage: number; sectionName: string }[] = [];
         let docViewerUrl = 'https://docs.google.com/viewer?url=';
 
         while (!isDone) {
@@ -368,7 +368,7 @@ export default function ChatInterface() {
                     __html: formatMessage(msg.content) + (
                       msg.sources && msg.sources.length > 0
                         ? msg.sources.map(s =>
-                            `<a href="/api/doc/serve#${s.sectionId}" target="_blank" rel="noopener noreferrer" class="msg-source-tag" aria-label="Xem nội dung: ${s.sectionName || s.sectionId}">📄</a>`
+                            `<a href="/api/doc/serve-pdf#page=${s.sourcePage}" target="_blank" rel="noopener noreferrer" class="msg-source-tag" aria-label="Xem trang ${s.sourcePage}: ${s.sectionName || ''}">📄</a>`
                           ).join('')
                         : ''
                     ),

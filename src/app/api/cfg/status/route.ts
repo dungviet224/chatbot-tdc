@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       docUpdatedAt,
       fileSize,
       docFile: config.docFile || null,
-      docUrl: embedStatus.ready ? '/api/doc/serve' : null,
+      docUrl: embedStatus.ready ? '/api/doc/serve-pdf' : null,
     },
   });
 }

@@ -14,8 +14,7 @@ export interface EmbeddedChunk {
   source: string;
   embedding: number[];
   embeddingType: 'neural';
-  sectionId?: string;
-  sectionName?: string;
+  sourcePage?: number;
 }
 
 // ========================
