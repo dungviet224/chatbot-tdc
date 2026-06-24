@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     // Update doc metadata in config
     saveConfig({
-      docFile: 'sotaynhanvien.docx',
+      docFile: file.name,
       docUpdatedAt: new Date().toISOString(),
     });
 
