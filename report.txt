@@ -1,0 +1,87 @@
+[PHẦN 1B: TIÊU CHÍ HÀNH VI & VĂN HÓA LÀM VIỆC]
+TD Consulting xây dựng văn hóa làm việc dựa trên 6 tiêu chí hành vi cốt lõi. Đây là kim chỉ nam cho mọi thành viên trong team, được áp dụng xuyên suốt trong mọi hoạt động và tương tác hàng ngày.
+**STT**
+**Tiêu chí**
+**Nội dung chi tiết**
+**1**
+**CHỦ ĐỘNG**
+Chủ động trao đổi các vấn đề trong công việc, đưa ra đề xuất và ý tưởng cải tiến. Không chờ đợi được giao việc mà tự nhận diện cơ hội và hành động.
+**2**
+**PHẢN HỒI**
+Ngay lập tức xác nhận thông tin khi nhận được yêu cầu. Luôn có phản hồi giải quyết vấn đề kịp thời, không để đồng nghiệp hoặc khách hàng chờ đợi.
+**3**
+**LẮNG NGHE**
+Lắng nghe góp ý và phản hồi từ đồng nghiệp, quản lý, khách hàng một cách cởi mở. Tiếp thu để cải thiện bản thân và nâng cao chất lượng công việc.
+**4**
+**SẴN SÀNG CHIA SẺ**
+Sẵn sàng chia sẻ kiến thức, kinh nghiệm và nguồn lực với đồng nghiệp. Tinh thần teamwork, cùng nhau phát triển.
+**5**
+**TÍCH CỰC**
+Luôn duy trì thái độ tích cực trong công việc, lan tỏa năng lượng tốt đến đồng đội. Đối mặt thử thách với tinh thần lạc quan và quyết tâm.
+**6**
+**TRUNG THỰC**
+Trung thực trong mọi hoạt động: báo cáo, giao tiếp với khách hàng, ứng viên và nội bộ. Xây dựng niềm tin bằng sự minh bạch và chính trực.
+**Lưu ý quan trọng**
+6 tiêu chí hành vi trên là cơ sở để đánh giá văn hóa làm việc của mỗi nhân viên.
+Mọi thành viên TD Consulting đều cam kết tuân thủ và thể hiện các tiêu chí này trong công việc hàng ngày.
+
+---
+
+[4.1. Quy chế đi muộn / về sớm & tính công]
+**a. Giờ làm việc chuẩn**
+- Thời gian tiêu chuẩn: 8 giờ/ngày (nghỉ trưa 12h - 13h).
+- Giờ khuyến nghị: 8h30 - 17h30.
+**b. Tính công khi đi muộn / về sớm**
+- Tính theo số giờ công thực tế.
+**c. Kênh xin phép**
+- Kênh: Discord - kênh #Xin đi làm muộn.
+- Đi muộn: Báo trước đầu buổi sáng.
+- Về sớm: Báo trước đầu buổi chiều.
+
+---
+
+[4.2. Báo cáo công việc]
+- Cập nhật tiến độ công việc trên hệ thống quản lý nội bộ (nếu có).
+
+---
+
+[Điều 6: TẠM DừNG / THU HỒI QUYỀN HYBRID]
+Công ty có quyền tạm dừng hoặc thu hồi quyền làm việc Hybrid trong các trường hợp:
+- Nhân sự vi phạm kỷ luật lao động hoặc nội quy Công ty.
+- Hiệu suất công việc bị đánh giá dưới mức yêu cầu.
+- Không đảm bảo online đúng giờ làm việc trong ngày Hybrid.
+- Không báo cáo công việc theo quy định.
+- Sử dụng ngày Hybrid khi chưa được phê duyệt.
+
+---
+
+[7.1. Kênh làm việc chính thức]
+**a. Email công việc**
+- Dùng để trao đổi đề xuất, ý kiến, quy định, báo cáo cần được phê duyệt hoặc xác nhận bởi cấp quản lý.
+- Là kênh chính thức để lưu lại bằng chứng làm việc và phê duyệt quan trọng.
+**b. Discord – Kênh làm việc nội bộ**
+Là nền tảng chính cho toàn bộ trao đổi công việc hàng ngày, bao gồm:
+- Dự án, job, ứng viên.
+- Marketing, HR, IT, vận hành.
+- Các quy định và thông báo nội bộ.
+
+---
+
+[PHẦN 10: BÁO CÁO CÔNG VIỆC HÀNG TUẦN]
+Nhằm đảm bảo công tác tổng hợp và theo dõi tiến độ công việc được kịp thời:
+**Hạng mục**
+**Chi tiết**
+**Thời hạn**
+**Trước 12h trưa Thứ 7 hàng tuần**
+**Bộ phận chịu trách nhiệm**
+MKT, HR, Headhunt, BD
+**Gửi về Email**
+infor@tdconsulting.vn (CC: admin@tdconsulting.vn)
+**Yêu cầu**
+Gửi trực tiếp Báo cáo tuần qua Email trước thời hạn. Hoàn thành đúng thời gian để đảm bảo đánh giá chính xác, đầy đủ.
+
+---
+
+[PHẦN 11: NGUYÊN TẮC LÀM DAILY PLAN]
+**Daily Plan là công cụ THỰC THI – không phải báo cáo hình thức**
+Giúp cá nhân focus đúng việc & đảm bảo job/client có tiến độ mỗi ngày.

@@ -197,7 +197,7 @@ function formatMessageWithSources(content: string, sources?: { id?: string; sect
     const src = sources.find(s => s.id === p1);
     if (src) {
       const pageNum = findPageForSection(src.sectionName);
-      return `<a href="/sotaynhanvien.pdf#page=${pageNum}" target="_blank" rel="noopener noreferrer" class="msg-inline-badge" title="${src.sectionName} (Tr.${pageNum})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${shortName(src.sectionName)}</a>`;
+      return `<a href="/api/doc/serve-pdf#page=${pageNum}" target="_blank" rel="noopener noreferrer" class="msg-inline-badge" title="${src.sectionName} (Tr.${pageNum})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${shortName(src.sectionName)}</a>`;
     }
     return match;
   });

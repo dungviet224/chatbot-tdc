@@ -251,6 +251,30 @@ function DocumentsTab({ embed, onUpload }: { embed: EmbedData; onUpload: (f: Fil
             className="cfg-hidden-input"
           />
           {msg && <p className={`cfg-upload-msg ${msg.startsWith('✅') ? 'cfg-msg-ok' : 'cfg-msg-err'}`}>{msg}</p>}
+
+          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px dashed var(--color-border)' }}>
+            <p className="cfg-hint" style={{ marginBottom: '12px' }}>
+              <strong>Lưu ý quan trọng:</strong> File DOCX ở trên dùng để nạp kiến thức cho AI học. Còn file PDF dưới đây dùng để hiển thị cho nhân viên xem khi bấm vào thẻ Nguồn trích dẫn. Bạn cần upload CẢ 2 file song song mỗi khi có chính sách mới.
+            </p>
+            <label className="cfg-upload-btn" htmlFor="cfg-pdf-upload" style={{ background: 'var(--color-bg-elevated)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
+              <Upload size={18} /> Chọn file .PDF để upload hiển thị
+            </label>
+            <input
+              id="cfg-pdf-upload"
+              type="file"
+              accept=".pdf"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const fd = new FormData(); fd.append('file', f);
+                const r = await fetch('/api/cfg/upload-pdf', { method: 'POST', body: fd, credentials: 'include' });
+                const d = await r.json();
+                alert(d.success ? '✅ Tải PDF hiển thị thành công!' : '❌ Lỗi: ' + d.error);
+                e.target.value = '';
+              }}
+              className="cfg-hidden-input"
+            />
+          </div>
         </div>
       </div>
     </div>
