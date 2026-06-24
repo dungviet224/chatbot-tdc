@@ -26,6 +26,15 @@ export async function GET(req: NextRequest) {
     }
   } catch {}
 
+  // Lấy base URL từ request headers để tạo link Google Docs Viewer
+  const proto = req.headers.get('x-forwarded-proto') || 'https';
+  const host = req.headers.get('host') || 'chatbot-tdc.vercel.app';
+  const baseUrl = `${proto}://${host}`;
+  const docxUrl = `${baseUrl}/api/doc/serve-docx`;
+  const docUrl = embedStatus.ready 
+    ? `https://docs.google.com/viewer?url=${encodeURIComponent(docxUrl)}&embedded=true`
+    : null;
+
   return NextResponse.json({
     success: true,
     config: {
@@ -41,7 +50,7 @@ export async function GET(req: NextRequest) {
       docUpdatedAt,
       fileSize,
       docFile: config.docFile || null,
-      docUrl: embedStatus.ready ? '/api/doc/serve-pdf' : null,
+      docUrl,
     },
   });
 }

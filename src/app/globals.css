@@ -383,31 +383,40 @@ body {
 }
 .msg-bubble:hover .msg-time { opacity: 0.7; }
 
-/* ── SOURCE TAG (inline in message) ── */
-.msg-source-tag {
-  display: inline;
-  font-size: 10px;
-  color: var(--color-text-muted);
-  opacity: 0.55;
-  margin-left: 4px;
+/* ── INLINE BADGE ── */
+.msg-inline-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.85em;
+  font-weight: 500;
+  color: var(--color-brand);
+  background: var(--color-brand-subtle);
+  border: 1px solid var(--color-border-2);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
   text-decoration: none;
+  margin: 0 4px;
+  vertical-align: baseline;
+  transition: all var(--duration-fast) var(--ease-out);
   white-space: nowrap;
-  transition: opacity var(--duration-fast) var(--ease-out);
 }
-
-.msg-source-tag:hover {
-  opacity: 1;
+.msg-inline-badge:hover {
+  background: var(--color-brand);
+  color: white;
+  border-color: var(--color-brand);
+}
+.msg-bubble.user .msg-inline-badge {
+  color: white;
+  background: rgba(255,255,255,0.2);
+  border-color: rgba(255,255,255,0.3);
+}
+.msg-bubble.user .msg-inline-badge:hover {
+  background: white;
   color: var(--color-brand);
 }
 
-.msg-bubble.user .msg-source-tag {
-  color: rgba(255,255,255,0.4);
-}
 
-.msg-bubble.user .msg-source-tag:hover {
-  color: white;
-  opacity: 1;
-}
+
 
 /* ── TYPING ── */
 .typing-dots {
@@ -1033,7 +1042,41 @@ body {
 .cfg-save-msg.ok { color: #059669; }
 .cfg-save-msg.err { color: #b91c1c; }
 
-/* ── Responsive ── */
+/* ── Source icon (inline next to section name) ── */
+.msg-source-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+  padding: 1px 6px 1px 3px;
+  background: var(--color-brand-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-brand);
+  text-decoration: none;
+  white-space: nowrap;
+  vertical-align: middle;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.msg-source-icon:hover {
+  background: var(--color-brand-light);
+  color: var(--color-brand-dark);
+}
+
+.msg-source-img {
+  width: 13px;
+  height: 13px;
+  object-fit: contain;
+}
+
+.msg-source-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 599px) {
   .cfg-header { padding: var(--space-3) var(--space-4); flex-wrap: wrap; gap: var(--space-2); }
   .cfg-header h1 { font-size: var(--text-md); }

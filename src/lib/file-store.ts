@@ -42,8 +42,12 @@ export function getWritableDir(): string {
   }
 }
 
-export function getPdfPath(): string {
-  return path.join(getWritableDir(), 'sotaynhanvien.pdf');
+export function getDocHtmlPath(): string {
+  return path.join(getWritableDir(), 'sotaynhanvien.html');
+}
+
+export function getDocxPath(): string {
+  return path.join(getWritableDir(), 'sotaynhanvien.docx');
 }
 
 export function getEmbeddingsJsonPath(): string {
@@ -51,14 +55,17 @@ export function getEmbeddingsJsonPath(): string {
 }
 
 export function getDocxServeUrl(): string {
-  return '/api/doc/serve-pdf';
+  return '/api/doc/serve-docx';
 }
 
 export function getDocViewerUrl(baseUrl: string): string {
-  const pdfUrl = `${baseUrl}/api/doc/serve-pdf`;
-  return `https://docs.google.com/viewer?url=${encodeURIComponent(pdfUrl)}&embedded=true`;
+  const docxUrl = `${baseUrl}/api/doc/serve-docx`;
+  return `https://docs.google.com/viewer?url=${encodeURIComponent(docxUrl)}&embedded=true`;
 }
 
-export function getPdfUrl(baseUrl: string): string {
-  return `${baseUrl}/api/doc/serve-pdf`;
+export function getSourceUrl(): string {
+  if (getWritableDir() === path.join(process.cwd(), 'public')) {
+    return '/sotaynhanvien.html';
+  }
+  return '/api/doc/serve-docx';
 }

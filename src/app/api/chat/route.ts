@@ -7,7 +7,7 @@ const API_KEY = process.env.CHAT_API_KEY || 'sk-987312a0a1689afc-m1wrjj-666571e0
 const MODEL = process.env.CHAT_MODEL || 'oc/deepseek-v4-flash-free';
 
 interface SourceLink {
-  sourcePage: number;
+  sectionId: string;
   sectionName: string;
 }
 
@@ -26,41 +26,39 @@ export async function POST(req: NextRequest) {
     const proto = req.headers.get('x-forwarded-proto') || 'https';
     const host = req.headers.get('host') || 'chatbot-tdc.vercel.app';
     const baseUrl = `${proto}://${host}`;
-    const pdfUrl = `${baseUrl}/api/doc/serve-pdf`;
-    const docViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(pdfUrl)}&embedded=true`;
+    const docxUrl = `${baseUrl}/api/doc/serve-docx`;
+    const docViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(docxUrl)}&embedded=true`;
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
     const userQuery = lastUserMsg?.content ?? '';
 
     // Lấy chunks liên quan bằng embedding + cosine similarity
-    const relevantChunks = await retrieveRelevantChunks(userQuery, 10);
+    const relevantChunks = await retrieveRelevantChunks(userQuery, 5);
 
-    // Gom source links theo page (dedup)
-    const sourceLinks: SourceLink[] = [];
-    const seenPages = new Set<number>();
+    // Gom nhóm chunks theo sectionName
+    const sectionsMap = new Map<string, { sectionId: string; content: string }>();
     for (const c of relevantChunks) {
-      if (c.sourcePage && !seenPages.has(c.sourcePage)) {
-        seenPages.add(c.sourcePage);
-        sourceLinks.push({ sourcePage: c.sourcePage, sectionName: c.sourcePage ? `Trang ${c.sourcePage}` : '' });
+      const name = c.sectionName || 'Sổ Tay Nhân Viên';
+      if (!sectionsMap.has(name)) {
+        sectionsMap.set(name, { sectionId: c.sectionId, content: c.content });
+      } else {
+        sectionsMap.get(name)!.content += '\n' + c.content;
       }
     }
 
-    // Merge chunks liền kề để tránh đứt đoạn nội dung
-    const mergedChunks = relevantChunks
-      .sort((a, b) => a.id - b.id)
-      .reduce((acc, chunk) => {
-        if (acc.length === 0) return [chunk];
-        const last = acc[acc.length - 1];
-        if (chunk.id === last.id + 1) {
-          acc[acc.length - 1] = {
-            ...last,
-            content: last.content + '\n\n' + chunk.content,
-          };
-          return acc;
-        }
-        return [...acc, chunk];
-      }, [] as typeof relevantChunks);
+    const sourceLinks: (SourceLink & { id: string })[] = [];
+    const contextLines: string[] = [];
+    let sourceIndex = 1;
+    for (const [name, data] of sectionsMap.entries()) {
+      sourceLinks.push({
+        id: sourceIndex.toString(),
+        sectionId: data.sectionId,
+        sectionName: name
+      });
+      contextLines.push(`[Nguồn ${sourceIndex}]\n${data.content}`);
+      sourceIndex++;
+    }
 
-    const contextText = mergedChunks.map((c, i) => `[Đoạn ${i + 1}]\n${c.content}`).join('\n\n---\n\n');
+    const contextText = contextLines.join('\n\n---\n\n');
 
     // Đọc rules từ config
     const cfg = getConfig();
@@ -79,7 +77,7 @@ export async function POST(req: NextRequest) {
       ...(userRules ? [] : [
         'QUY TẮC BẮT BUỘC:',
         '1. Thông tin trả lời PHẢI CÓ trong dữ liệu trên. Tuyệt đối không bịa, suy đoán, hay thêm thông tin tự biết.',
-        '2. Được phép suy luận ngữ nghĩa: nếu dữ liệu có "Tổng Giám Đốc" mà hỏi "ai điều hành" → trả lời được.',
+        '2. Khi dùng thông tin từ Nguồn nào, BẮT BUỘC chèn thẻ [Nguồn X] (X là số của Nguồn) ngay sau câu chứa thông tin đó. Ví dụ: "...hưởng 85% lương cơ bản [Nguồn 1]." (Trích dẫn phải nằm ngay vị trí nội dung, không dồn xuống cuối).',
         '3. Nếu thông tin THỰC SỰ KHÔNG CÓ trong dữ liệu: trả lời "Tôi không tìm thấy thông tin này trong Sổ Tay Nhân Viên."',
         '4. Nếu câu hỏi KHÔNG LIÊN QUAN đến chính sách/nội quy/nhân sự: trả lời "Tôi chỉ hỗ trợ các câu hỏi liên quan đến Sổ Tay Nhân Viên TDConsulting."',
         '5. Không thay đổi bất kỳ con số, ngày tháng, tỉ lệ nào trong tài liệu.',
@@ -91,7 +89,6 @@ export async function POST(req: NextRequest) {
         '- Xưng "tôi", gọi người dùng là "bạn"',
       ]),
       '',
-      'QUAN TRỌNG: Khi trả lời, nếu thông tin lấy từ trang cụ thể trong tài liệu, hãy thêm tag nguồn ở cuối đoạn. Dùng định dạng: 📖 [Tên nội dung - Trang X]',
     ].join('\n');
 
     const requestMessages = [
@@ -123,7 +120,7 @@ export async function POST(req: NextRequest) {
 
     // Stream response về client, kèm sourceLinks ở cuối
     const encoder = new TextEncoder();
-    const sourcePayload = JSON.stringify({ sources: sourceLinks });
+    const sourcePayload = JSON.stringify({ sources: sourceLinks, docViewerUrl });
 
     const readable = new ReadableStream({
       async start(controller) {

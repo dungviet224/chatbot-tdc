@@ -1,83 +1,166 @@
 /**
- * Build-time script: extract PDF → chunk → call API embedding → save JSON
+ * Build-time script: extract DOCX → chunk → call API embedding → save JSON
  * Output: public/embeddings-data.json (commit to git, Vercel reads it)
  * Chạy: node scripts/precompute-embeddings.js
- *
- * Yêu cầu: file public/sotaynhanvien.pdf tồn tại
  */
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+const http = require('http');
 
-const ROOT = path.resolve(__dirname, '..');
+const ROOT = path.resolve(__dirname, '..'); // project root (chatbot-tdc/)
 
 const API_BASE = process.env.EMBED_API_BASE || 'http://mbasic8.pikamc.vn:25246/v1';
 const API_KEY = process.env.EMBED_API_KEY || 'sk-987312a0a1689afc-m1wrjj-666571e0';
 const EMBED_MODEL = process.env.EMBED_MODEL || 'openrouter/openai/text-embedding-3-large';
 const BATCH_SIZE = 20;
-const CHUNK_MAX_SIZE = 450;
-const CHUNK_OVERLAP = 80;
+
+function fetchJSON(url, data) {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const mod = urlObj.protocol === 'https:' ? https : http;
+    const body = JSON.stringify(data);
+    const options = {
+      hostname: urlObj.hostname,
+      port: urlObj.port,
+      path: urlObj.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${API_KEY}`,
+      },
+      timeout: 120000,
+    };
+    const req = mod.request(options, (res) => {
+      let chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString()));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
 
 async function callEmbedAPI(texts) {
-  const fetch = (await import('node-fetch')).default;
-  const res = await fetch(`${API_BASE}/embeddings`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: EMBED_MODEL,
-      input: texts.map(t => t.slice(0, 8000)),
-    }),
+  const data = await fetchJSON(`${API_BASE}/embeddings`, {
+    model: EMBED_MODEL,
+    input: texts.map(t => t.slice(0, 8000)),
   });
-  if (!res.ok) throw new Error(`API fail: ${res.status}`);
-  const data = await res.json();
   if (!data?.data) throw new Error('Embedding API trả về null');
   return data.data.sort((a, b) => a.index - b.index).map(d => d.embedding);
 }
 
+/** === CHUNK TEXT with section tracking === */
 function chunkText(fullText, maxSize = 450, overlap = 80) {
-  const paras = fullText.split(/\n{2,}/).filter(p => p.trim().length > 10);
-  const chunks = [];
-  let buf = '';
-  for (const p of paras) {
-    const c = buf + (buf ? '\n\n' : '') + p;
-    if (c.length >= maxSize && buf) {
-      chunks.push(buf.trim());
-      const words = buf.split(/\s+/);
-      const overlapWords = words.slice(-Math.ceil(overlap / 5)).join(' ');
-      buf = overlapWords + '\n\n' + p;
-    } else {
-      buf = c;
+  const lines = fullText.split('\n').map(s => s.trimEnd());
+  const sections = [];
+  let h = '', cl = [], sids = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    // Detect section marker: ⸻SECTION:section-X⸻
+    const markerMatch = t.match(/⸻SECTION:([^⸻]+)⸻/);
+    if (markerMatch) {
+      if (cl.length > 0) { sections.push({ heading: h, content: cl, sectionIds: [...sids] }); cl = []; }
+      sids.push(markerMatch[1]);
+      h = sids.map(s => s.replace('section-', '#')).join(', ');
+      continue;
     }
+    const isH = /^###/.test(t) || /^PHẦN\s+\d+/i.test(t) || /^\d+\.\d+[\.\s]/.test(t)
+      || /^[A-ZĐÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬ\s]{10,}$/.test(t);
+    if (isH && cl.length > 0) { sections.push({ heading: h, content: cl, sectionIds: [...sids] }); cl = []; h = t.replace(/^###\s*/, '').replace(/\s*###$/, '').trim(); }
+    else if (isH) { h = t.replace(/^###\s*/, '').replace(/\s*###$/, '').trim(); }
+    else cl.push(t);
   }
-  if (buf.trim()) chunks.push(buf.trim());
+  if (cl.length > 0) sections.push({ heading: h, content: cl, sectionIds: [...sids] });
+
+  const result = [];
+  for (const s of sections) {
+    const prefix = s.heading ? `[${s.heading}]\n` : '';
+    const body = s.content.join('\n').trim();
+    if (!body) continue;
+    const full = (prefix + body).trim();
+    if (full.length <= maxSize) { result.push({ chunk: full, sectionIds: s.sectionIds }); continue; }
+    const paras = body.split(/\n{2,}/).filter(p => p.trim().length > 10);
+    let buf = prefix;
+    for (const p of paras) {
+      const c = buf + (buf === prefix ? '' : '\n\n') + p;
+      if (c.length >= maxSize && buf !== prefix) { result.push({ chunk: buf.trim(), sectionIds: s.sectionIds }); buf = prefix + buf.split(/\s+/).slice(-Math.ceil(overlap / 5)).join(' ') + '\n\n' + p; }
+      else buf = c;
+    }
+    if (buf.trim() && buf.trim() !== prefix.trim()) result.push({ chunk: buf.trim(), sectionIds: s.sectionIds });
+  }
   const seen = new Set();
-  return chunks.filter(c => c.trim().length > 30).filter(c => {
-    const k = c.substring(0, 50);
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+  return result.filter(c => c.chunk.trim().length > 30).filter(c => { const k = c.chunk.substring(0, 50); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+/** Extract section map from HTML headings */
+function extractSectionMap(html) {
+  const map = new Map();
+  const regex = /<h([1-6])([^>]*)id="(section-\d+)"([^>]*)>(.*?)<\/h[1-6]>/gi;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    const rawText = match[5];
+    const cleanText = rawText.replace(/<[^>]+>/g, '').trim();
+    map.set(match[3], cleanText);
+  }
+  return map;
 }
 
 (async () => {
-  const pdfPath = path.join(ROOT, 'public', 'sotaynhanvien.pdf');
-  if (!fs.existsSync(pdfPath)) {
-    console.error(`❌ Không tìm thấy ${pdfPath}. Đặt file PDF vào public/ trước.`);
-    process.exit(1);
-  }
+  console.log('[Precompute] Extracting DOCX...');
+  const mammoth = require('mammoth');
 
-  console.log('[Precompute] Reading PDF...');
-  const buf = fs.readFileSync(pdfPath);
-  const pdf = require('pdf-parse');
-  const data = await pdf(buf);
-  const pages = data.text.split('\f').filter(p => p.trim().length > 0);
-  console.log(`[Precompute] ${pages.length} pages`);
+  const filePath = path.join(ROOT, 'public', 'sotaynhanvien.docx');
+  const { value: html } = await mammoth.convertToHtml({ path: filePath });
 
-  // Chunk text from all pages
-  const allText = pages.join('\n\n');
-  const rawChunks = chunkText(allText, CHUNK_MAX_SIZE, CHUNK_OVERLAP);
+  // Add id="section-N" to headings
+  let sectionIndex = 0;
+  const annotatedHtml = html.replace(
+    /<(h[1-6])([^>]*)>/gi,
+    (match, tag, attrs) => {
+      const id = `section-${sectionIndex++}`;
+      if (/id=/.test(attrs)) return match;
+      return `<${tag}${attrs} id="${id}">`;
+    }
+  );
+
+  // Build sectionName map
+  const sectionMap = extractSectionMap(annotatedHtml);
+
+  // Insert section markers before headings, then strip HTML
+  let sectionedHtml = annotatedHtml.replace(
+    /<h([1-6])([^>]*)id="(section-\d+)"([^>]*)>/gi,
+    (match, _tag, _before, id, _after) => {
+      return `⸻SECTION:${id}⸻\n${match}`;
+    }
+  );
+
+  const text = sectionedHtml
+    .replace(/<tr[^>]*>/gi, '\n').replace(/<\/tr>/gi, '')
+    .replace(/<t[dh][^>]*>/gi, '').replace(/<\/t[dh]>/gi, ' | ')
+    .replace(/<h([1-6])[^>]*>/gi, '\n\n### ').replace(/<\/h[1-6]>/gi, ' ###\n')
+    .replace(/<li[^>]*>/gi, '\n- ').replace(/<\/li>/gi, '')
+    .replace(/<p[^>]*>/gi, '\n').replace(/<\/p>/gi, '\n')
+    .replace(/<strong[^>]*>/gi, '**').replace(/<\/strong>/gi, '**')
+    .replace(/<em[^>]*>/gi, '').replace(/<\/em>/gi, '')
+    .replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)))
+    .replace(/(\|\s*){3,}/g, ' | ').replace(/\|\s*\n/g, '\n')
+    .replace(/\n\s*\|\s*\n/g, '\n').replace(/[ \t]+/g, ' ')
+    .replace(/\n{4,}/g, '\n\n\n').trim();
+
+  console.log(`[Precompute] Extracted ${text.length} chars`);
+
+  const rawChunks = chunkText(text, 450, 80);
   console.log(`[Precompute] ${rawChunks.length} chunks`);
 
   // Embed via API
@@ -85,14 +168,20 @@ function chunkText(fullText, maxSize = 450, overlap = 80) {
   const embedded = [];
   for (let i = 0; i < rawChunks.length; i += BATCH_SIZE) {
     const batch = rawChunks.slice(i, i + BATCH_SIZE);
-    const vecs = await callEmbedAPI(batch);
+    const batchTexts = batch.map(c => c.chunk);
+    const vecs = await callEmbedAPI(batchTexts);
     for (let j = 0; j < batch.length; j++) {
+      const item = rawChunks[i + j];
+      const lastSectionId = item.sectionIds[item.sectionIds.length - 1] || '';
+      const sectionName = lastSectionId ? (sectionMap.get(lastSectionId) || '') : '';
       embedded.push({
         id: i + j,
-        content: rawChunks[i + j],
+        content: item.chunk,
         source: 'SoTayNhanVien_TDConsulting',
         embedding: vecs[j],
         embeddingType: 'neural',
+        sectionId: lastSectionId || undefined,
+        sectionName: sectionName || undefined,
       });
     }
     console.log(`[Precompute] Batch ${Math.min(i + BATCH_SIZE, rawChunks.length)}/${rawChunks.length}`);
@@ -102,5 +191,5 @@ function chunkText(fullText, maxSize = 450, overlap = 80) {
   const outPath = path.join(ROOT, 'public', 'embeddings-data.json');
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(embedded), 'utf-8');
-  console.log(`[Precompute] ✅ Saved ${embedded.length} chunks, dim=${embedded[0]?.embedding.length} -> ${outPath}`);
+  console.log(`[Precompute] ✅ Saved ${embedded.length} chunks, dim=${embedded[0]?.embedding?.length} -> ${outPath}`);
 })();

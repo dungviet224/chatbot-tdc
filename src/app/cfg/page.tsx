@@ -207,11 +207,20 @@ function DocumentsTab({ embed, onUpload }: { embed: EmbedData; onUpload: (f: Fil
               <div className="cfg-stat"><span className="cfg-stat-label">Tên file</span>
                 <span className="cfg-stat-val">
                   {embed.docUrl ? (
-                    <a href={embed.docUrl} target="_blank" rel="noopener noreferrer" className="cfg-doc-link">
-                      {embed.docFile || 'sotaynhanvien.pdf'}
+                    <a 
+                      href={
+                        typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                          ? '/sotaynhanvien.pdf'
+                          : embed.docUrl
+                      } 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="cfg-doc-link"
+                    >
+                      {embed.docFile || 'sotaynhanvien.docx'}
                     </a>
                   ) : (
-                    embed.docFile || 'sotaynhanvien.pdf'
+                    embed.docFile || 'sotaynhanvien.docx'
                   )}
                 </span>
               </div>
@@ -230,13 +239,13 @@ function DocumentsTab({ embed, onUpload }: { embed: EmbedData; onUpload: (f: Fil
         <div className="cfg-upload-area">
           <label className="cfg-upload-btn" htmlFor="cfg-file-upload">
             {uploading ? <Loader2 size={18} className="spin" /> : <Upload size={18} />}
-            {uploading ? 'Đang xử lý...' : 'Chọn file .pdf để upload'}
+            {uploading ? 'Đang xử lý...' : 'Chọn file .docx để upload'}
           </label>
           <input
             ref={fileRef}
             id="cfg-file-upload"
             type="file"
-            accept=".pdf"
+            accept=".docx"
             onChange={handleFile}
             disabled={uploading}
             className="cfg-hidden-input"

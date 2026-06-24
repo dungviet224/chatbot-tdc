@@ -1,12 +1,17 @@
 /**
- * Re-embed: parse PDF → chunk → API embedding → save JSON
- * Khi upload file mới, sinh embeddings từ PDF
+ * Re-embed: parse DOCX → chunk → API embedding → save JSON + HTML
+ * Khi upload file mới, sinh file HTML công khai có anchor theo section
  */
 
 import path from 'path';
 import fs from 'fs';
 import { getConfig } from './cfg-store';
-import { getEmbeddingsJsonPath, getPdfPath } from './file-store';
+import {
+  getDocHtmlPath,
+  getEmbeddingsJsonPath,
+  getWritableDir,
+  getSourceUrl,
+} from './file-store';
 
 const BATCH_SIZE = 20;
 const CHUNK_MAX_SIZE = 450;
@@ -38,38 +43,47 @@ async function callEmbedAPI(texts: string[], apiBase: string, apiKey: string, mo
   }
 }
 
-function chunkText(fullText: string): string[] {
-  const paras = fullText.split(/\n{2,}/).filter(p => p.trim().length > 10);
-  const chunks: string[] = [];
-  let buf = '';
-  for (const p of paras) {
-    const c = buf + (buf ? '\n\n' : '') + p;
-    if (c.length >= CHUNK_MAX_SIZE && buf) {
-      chunks.push(buf.trim());
-      // overlap: lấy từ cuối buf
-      const words = buf.split(/\s+/);
-      const overlapWords = words.slice(-Math.ceil(CHUNK_OVERLAP / 5)).join(' ');
-      buf = overlapWords + '\n\n' + p;
-    } else {
-      buf = c;
+function chunkText(fullText: string): { chunk: string; sectionIds: string[] }[] {
+  const lines = fullText.split('\n').map(s => s.trimEnd());
+  const sections: { heading: string; content: string[]; sectionIds: string[] }[] = [];
+  let h = '', cl: string[] = [], sids: string[] = [];
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    // Detect section marker: ⸻SECTION:section-X⸻
+    const markerMatch = t.match(/⸻SECTION:([^⸻]+)⸻/);
+    if (markerMatch) {
+      if (cl.length > 0) { sections.push({ heading: h, content: cl, sectionIds: [...sids] }); cl = []; }
+      sids.push(markerMatch[1]);
+      h = sids.map(s => s.replace('section-', '#')).join(', ');
+      continue;
     }
+    const isH = /^###/.test(t) || /^PHẦN\s+\d+/i.test(t) || /^\d+\.\d+[\.\s]/.test(t)
+      || /^[A-ZĐÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬ\s]{10,}$/.test(t);
+    if (isH && cl.length > 0) { sections.push({ heading: h, content: cl, sectionIds: [...sids] }); cl = []; h = t.replace(/^###\s*/, '').replace(/\s*###$/, '').trim(); }
+    else if (isH) { h = t.replace(/^###\s*/, '').replace(/\s*###$/, '').trim(); }
+    else cl.push(t);
   }
-  if (buf.trim()) chunks.push(buf.trim());
-  const seen = new Set<string>();
-  return chunks.filter(c => c.length > 30).filter(c => {
-    const k = c.substring(0, 50);
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
-}
+  if (cl.length > 0) sections.push({ heading: h, content: cl, sectionIds: [...sids] });
 
-async function parsePdfPages(pdfPath: string): Promise<{ text: string; pageNum: number }[]> {
-  const pdf = require('pdf-parse');
-  const buf = fs.readFileSync(pdfPath);
-  const data = await pdf(buf);
-  const pages = data.text.split('\f').filter((p: string) => p.trim().length > 0);
-  return pages.map((text: string, i: number) => ({ text: text.trim(), pageNum: i + 1 }));
+  const result: { chunk: string; sectionIds: string[] }[] = [];
+  for (const s of sections) {
+    const prefix = s.heading ? `[${s.heading}]\n` : '';
+    const body = s.content.join('\n').trim();
+    if (!body) continue;
+    const full = (prefix + body).trim();
+    if (full.length <= CHUNK_MAX_SIZE) { result.push({ chunk: full, sectionIds: s.sectionIds }); continue; }
+    const paras = body.split(/\n{2,}/).filter(p => p.trim().length > 10);
+    let buf = prefix;
+    for (const p of paras) {
+      const c = buf + (buf === prefix ? '' : '\n\n') + p;
+      if (c.length >= CHUNK_MAX_SIZE && buf !== prefix) { result.push({ chunk: buf.trim(), sectionIds: s.sectionIds }); buf = prefix + buf.split(/\s+/).slice(-Math.ceil(CHUNK_OVERLAP / 5)).join(' ') + '\n\n' + p; }
+      else buf = c;
+    }
+    if (buf.trim() && buf.trim() !== prefix.trim()) result.push({ chunk: buf.trim(), sectionIds: s.sectionIds });
+  }
+  const seen = new Set<string>();
+  return result.filter(c => c.chunk.trim().length > 30).filter(c => { const k = c.chunk.substring(0, 50); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
 async function embedChunks(chunks: string[], apiBase: string, apiKey: string, model: string): Promise<number[][]> {
@@ -90,53 +104,201 @@ export interface ReembedResult {
   file: string;
 }
 
-export async function reembedFromPdf(pdfPath: string): Promise<ReembedResult> {
+// Map sectionId → sectionName từ HTML headings
+function extractSectionMap(html: string): Map<string, string> {
+  const map = new Map<string, string>();
+  const regex = /<h([1-6])([^>]*)id="(section-\d+)"([^>]*)>(.*?)<\/h[1-6]>/gi;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    const rawText = match[5];
+    const cleanText = rawText.replace(/<[^>]+>/g, '').trim();
+    map.set(match[3], cleanText);
+  }
+  return map;
+}
+
+export interface SectionMeta {
+  id: string;
+  name: string;
+}
+
+// Style cho HTML công khai
+const HTML_STYLE = `
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: 16px; line-height: 1.7;
+  color: #1c0a13; background: #fcf2f7;
+  max-width: 860px; margin: 0 auto; padding: 32px 20px;
+}
+h1, h2, h3, h4 { font-family: 'Outfit', 'Inter', sans-serif; color: #b8146a; margin-top: 32px; margin-bottom: 12px; }
+h1 { font-size: 28px; border-bottom: 2px solid #f5a3cc; padding-bottom: 8px; }
+h2 { font-size: 22px; }
+h3 { font-size: 18px; }
+p { margin-bottom: 12px; }
+ul, ol { margin: 8px 0 12px 24px; }
+li { margin-bottom: 4px; }
+strong { color: #d4227b; }
+hr { border: none; border-top: 1px solid #f5a3cc; margin: 32px 0; }
+
+/* ── Tables ── */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: 14px;
+}
+th, td {
+  border: 1px solid #d4a0b8;
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: linear-gradient(135deg, #d4227b, #e8559f);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+tr:nth-child(even) td {
+  background: rgba(212, 34, 123, 0.04);
+}
+tr:hover td {
+  background: rgba(212, 34, 123, 0.08);
+}
+
+.highlight {
+  animation: hl-fade 3s ease-out forwards;
+  background: linear-gradient(120deg, rgba(212,34,123,0.12) 0%, transparent 100%);
+  border-radius: 4px; padding: 0 4px; margin: 0 -4px;
+}
+@keyframes hl-fade {
+  0% { background: linear-gradient(120deg, rgba(212,34,123,0.25) 0%, transparent 100%); }
+  100% { background: linear-gradient(120deg, rgba(212,34,123,0.06) 0%, transparent 100%); }
+}
+`;
+
+export async function reembedFromDocx(docxPath: string): Promise<ReembedResult> {
   const cfg = getConfig();
   const apiBase = cfg.apiBase || process.env.EMBED_API_BASE || 'http://mbasic8.pikamc.vn:25246/v1';
   const apiKey = cfg.apiKey || process.env.EMBED_API_KEY || 'sk-987312a0a1689afc-m1wrjj-666571e0';
   const embedModel = cfg.embedModel || process.env.EMBED_MODEL || 'openrouter/openai/text-embedding-3-large';
 
-  console.log('[Reembed] Parsing PDF...');
-  const pages = await parsePdfPages(pdfPath);
-  console.log(`[Reembed] ${pages.length} pages`);
+  console.log('[Reembed] Parsing DOCX...');
+  const mammoth = require('mammoth');
+  const { value: html } = await mammoth.convertToHtml({ path: docxPath });
 
-  // Chunk mỗi page riêng rẽ, map pageNum → chunks
-  const allChunks: { chunk: string; pageNum: number }[] = [];
-  for (const page of pages) {
-    const pageChunks = chunkText(page.text);
-    for (const c of pageChunks) {
-      allChunks.push({ chunk: c, pageNum: page.pageNum });
+  // Thêm id="section-N" vào các thẻ heading
+  let sectionIndex = 0;
+  const annotatedHtml = html.replace(
+    /<(h[1-6])([^>]*)>/gi,
+    (match: string, tag: string, attrs: string) => {
+      const id = `section-${sectionIndex++}`;
+      // Nếu đã có id thì ko thay
+      if (/id=/.test(attrs)) return match;
+      return `<${tag}${attrs} id="${id}">`;
     }
-  }
-  console.log(`[Reembed] ${allChunks.length} chunks`);
+  );
 
-  if (allChunks.length === 0) {
-    throw new Error('PDF không có nội dung để chunk');
-  }
+  // Lưu section map
+  const sectionMap = extractSectionMap(annotatedHtml);
+
+  // Ghi file HTML công khai
+  const htmlPath = getDocHtmlPath();
+  const fullHtml = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sổ Tay Nhân Viên TDConsulting</title>
+<style>${HTML_STYLE}</style>
+</head>
+<body>
+${annotatedHtml}
+<script>
+// Highlight section nếu URL có hash
+if (location.hash) {
+  setTimeout(() => {
+    const el = document.querySelector(location.hash);
+    if (el) {
+      el.classList.add('highlight');
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 300);
+}
+</script>
+</body>
+</html>`;
+  fs.mkdirSync(path.dirname(htmlPath), { recursive: true });
+  fs.writeFileSync(htmlPath, fullHtml, 'utf-8');
+  console.log(`[Reembed] ✅ Saved HTML -> ${htmlPath}`);
+
+  // Copy HTML sang public/ để persist qua deploy
+  try {
+    const publicHtml = path.join(process.cwd(), 'public', 'sotaynhanvien.html');
+    fs.writeFileSync(publicHtml, fullHtml, 'utf-8');
+  } catch { /* Vercel read-only */ }
+
+  // Chèn marker section vào text trước khi strip HTML
+  let sectionedHtml = annotatedHtml;
+  // Thay heading có id bằng marker
+  sectionedHtml = sectionedHtml.replace(
+    /<h([1-6])([^>]*)id="(section-\d+)"([^>]*)>/gi,
+    (match: string, _tag: string, _before: string, id: string, _after: string) => {
+      return `⸻SECTION:${id}⸻\n${match}`;
+    }
+  );
+
+  // Strip HTML tags → text
+  const text = sectionedHtml
+    .replace(/<tr[^>]*>/gi, '\n').replace(/<\/tr>/gi, '')
+    .replace(/<t[dh][^>]*>/gi, '').replace(/<\/t[dh]>/gi, ' | ')
+    .replace(/<h([1-6])[^>]*>/gi, '\n\n### ').replace(/<\/h[1-6]>/gi, ' ###\n')
+    .replace(/<li[^>]*>/gi, '\n- ').replace(/<\/li>/gi, '')
+    .replace(/<p[^>]*>/gi, '\n').replace(/<\/p>/gi, '\n')
+    .replace(/<strong[^>]*>/gi, '**').replace(/<\/strong>/gi, '**')
+    .replace(/<em[^>]*>/gi, '').replace(/<\/em>/gi, '')
+    .replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_: string, n: string) => String.fromCharCode(parseInt(n)))
+    .replace(/(\|\s*){3,}/g, ' | ').replace(/\|\s*\n/g, '\n')
+    .replace(/\n\s*\|\s*\n/g, '\n').replace(/[ \t]+/g, ' ')
+    .replace(/\n{4,}/g, '\n\n\n').trim();
+
+  const rawChunks = chunkText(text);
+  console.log(`[Reembed] ${rawChunks.length} chunks`);
 
   console.log('[Reembed] Embedding via API...');
-  const chunkTexts = allChunks.map(c => c.chunk);
+  const chunkTexts = rawChunks.map(c => c.chunk);
   const vectors = await embedChunks(chunkTexts, apiBase, apiKey, embedModel);
 
-  const embedded = allChunks.map((item, i) => ({
-    id: i,
-    content: item.chunk,
-    source: 'SoTayNhanVien_TDConsulting',
-    embedding: vectors[i],
-    embeddingType: 'neural' as const,
-    sourcePage: item.pageNum,
-  }));
+  const embedded = rawChunks.map((item, i) => {
+    // Lấy sectionId cuối (gần nhất), sectionId đầu là section gốc
+    const lastSectionId = item.sectionIds[item.sectionIds.length - 1] || '';
+    const sectionName = lastSectionId ? (sectionMap.get(lastSectionId) || '') : '';
+    return {
+      id: i,
+      content: item.chunk,
+      source: 'SoTayNhanVien_TDConsulting',
+      embedding: vectors[i],
+      embeddingType: 'neural' as const,
+      sectionId: lastSectionId || undefined,
+      sectionName: sectionName || undefined,
+    };
+  });
 
   const outPath = getEmbeddingsJsonPath();
   fs.writeFileSync(outPath, JSON.stringify(embedded), 'utf-8');
 
-  // Copy sang public/ để persist
+  // Copy JSON sang public/ để persist qua deploy
   try {
     const publicJson = path.join(process.cwd(), 'public', 'embeddings-data.json');
     fs.writeFileSync(publicJson, JSON.stringify(embedded), 'utf-8');
   } catch { /* Vercel read-only */ }
 
-  console.log(`[Reembed] ✅ Saved ${embedded.length} chunks, dim=${vectors[0]?.length || 0} -> ${outPath}`);
+  console.log(`[Reembed] ✅ Saved ${embedded.length} chunks -> ${outPath}`);
 
   return {
     chunks: embedded.length,

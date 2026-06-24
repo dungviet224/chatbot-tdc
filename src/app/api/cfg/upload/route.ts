@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveConfig } from '@/lib/cfg-store';
-import { reembedFromPdf } from '@/lib/reembed';
+import { reembedFromDocx } from '@/lib/reembed';
 import { updateCache } from '@/lib/docLoader';
-import { getPdfPath, getEmbeddingsJsonPath } from '@/lib/file-store';
+import { getDocxPath, getEmbeddingsJsonPath } from '@/lib/file-store';
 import path from 'path';
 import fs from 'fs';
 
@@ -22,28 +22,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Không có file' }, { status: 400 });
     }
 
-    // Validate .pdf
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      return NextResponse.json({ success: false, error: 'Chỉ hỗ trợ file .pdf' }, { status: 400 });
+    // Validate .docx
+    if (!file.name.toLowerCase().endsWith('.docx')) {
+      return NextResponse.json({ success: false, error: 'Chỉ hỗ trợ file .docx' }, { status: 400 });
     }
 
     // Save file to writable directory
-    const pdfPath = getPdfPath();
+    const docxPath = getDocxPath();
     const buffer = Buffer.from(await file.arrayBuffer());
-    fs.writeFileSync(pdfPath, buffer);
+    fs.writeFileSync(docxPath, buffer);
 
     // Also copy to public/ để persist (trên local dev)
     try {
-      const publicPdf = path.join(process.cwd(), 'public', 'sotaynhanvien.pdf');
-      fs.writeFileSync(publicPdf, buffer);
+      const publicDocx = path.join(process.cwd(), 'public', 'sotaynhanvien.docx');
+      fs.writeFileSync(publicDocx, buffer);
     } catch { /* Vercel read-only, bỏ qua */ }
 
     // Re-embed
-    const result = await reembedFromPdf(pdfPath);
+    const result = await reembedFromDocx(docxPath);
 
     // Update doc metadata in config
     saveConfig({
-      docFile: file.name,
+      docFile: 'sotaynhanvien.docx',
       docUpdatedAt: new Date().toISOString(),
     });
 
