@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
     for (const c of relevantChunks) {
       const name = c.sectionName || 'Sổ Tay Nhân Viên';
       if (!sectionsMap.has(name)) {
-        sectionsMap.set(name, { sectionId: c.sectionId, content: c.content });
+        sectionsMap.set(name, { sectionId: c.sectionId || '', content: c.content });
       } else {
         sectionsMap.get(name)!.content += '\n' + c.content;
       }
