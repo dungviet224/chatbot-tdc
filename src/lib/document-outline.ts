@@ -47,12 +47,12 @@ export const OUTLINE_ITEMS: OutlineItem[] = [
   { id: 'sec-39', text: '9.1. Nguyên tắc đăng tuyển', level: 2, page: 17 },
   { id: 'sec-40', text: '9.2. Yêu cầu Branding cá nhân (BD & Headhunt)', level: 2, page: 17 },
   { id: 'sec-41', text: 'PHẦN 10: BÁO CÁO CÔNG VIỆC HÀNG TUẦN', level: 1, page: 18 },
-  { id: 'sec-42', text: 'PHẦN 11: NGUYÊN TẮC LÀM DAILY PLAN', level: 1, page: 19 },
-  { id: 'sec-43', text: '11.1. Nguyên tắc viết Daily Plan', level: 2, page: 19 },
-  { id: 'sec-44', text: '11.2. Mỗi task BẮT BUỘC có target đo được', level: 2, page: 19 },
-  { id: 'sec-45', text: '11.3. Daily Plan gắn với KẾT QUẢ', level: 2, page: 19 },
-  { id: 'sec-46', text: '11.4. Random Check', level: 2, page: 19 },
-  { id: 'sec-47', text: '11.5. Daily Plan là cam kết cá nhân', level: 2, page: 19 },
+  { id: 'sec-42', text: 'PHẦN 11: NGUYÊN TẮC LÀM DAILY PLAN', level: 1, page: 22 },
+  { id: 'sec-43', text: '11.1. Nguyên tắc viết Daily Plan', level: 2, page: 22 },
+  { id: 'sec-44', text: '11.2. Mỗi task BẮT BUỘC có target đo được', level: 2, page: 22 },
+  { id: 'sec-45', text: '11.3. Daily Plan gắn với KẾT QUẢ', level: 2, page: 22 },
+  { id: 'sec-46', text: '11.4. Random Check', level: 2, page: 22 },
+  { id: 'sec-47', text: '11.5. Daily Plan là cam kết cá nhân', level: 2, page: 22 },
 ];
 
 export function findPageForSection(secName: string): number {
