@@ -94,10 +94,9 @@ export async function POST(req: NextRequest) {
       ...(userRules ? [] : [
         'QUY TẮC BẮT BUỘC:',
         '1. Thông tin trả lời PHẢI CÓ trong dữ liệu trên. Tuyệt đối không bịa, suy đoán, hay thêm thông tin tự biết.',
-        '2. MỖI CÂU TRẢ LỜI ĐỀU PHẢI BẮT ĐẦU bằng Tag nguồn tương ứng. Ví dụ: "[PHẦN 4] Theo quy định, nhân viên được hưởng..."',
-        '3. Nếu thông tin THỰC SỰ KHÔNG CÓ trong dữ liệu: trả lời "Tôi không tìm thấy thông tin này trong Sổ Tay Nhân Viên."',
-        '4. Nếu câu hỏi KHÔNG LIÊN QUAN đến chính sách/nội quy/nhân sự: trả lời "Tôi chỉ hỗ trợ các câu hỏi liên quan đến Sổ Tay Nhân Viên TDConsulting."',
-        '5. Không thay đổi bất kỳ con số, ngày tháng, tỉ lệ nào trong tài liệu.',
+        '2. Nếu thông tin THỰC SỰ KHÔNG CÓ trong dữ liệu: trả lời "Tôi không tìm thấy thông tin này trong Sổ Tay Nhân Viên."',
+        '3. Nếu câu hỏi KHÔNG LIÊN QUAN đến chính sách/nội quy/nhân sự: trả lời "Tôi chỉ hỗ trợ các câu hỏi liên quan đến Sổ Tay Nhân Viên TDConsulting."',
+        '4. Không thay đổi bất kỳ con số, ngày tháng, tỉ lệ nào trong tài liệu.',
         '',
         'ĐỊNH DẠNG TRẢ LỜI:',
         '- Tiếng Việt, ngắn gọn, chuyên nghiệp',
