@@ -54,6 +54,10 @@ export function getEmbeddingsJsonPath(): string {
   return path.join(getWritableDir(), 'embeddings-data.json');
 }
 
+export function getOutlineJsonPath(): string {
+  return path.join(getWritableDir(), 'page-mapping.json');
+}
+
 export function getDocxServeUrl(): string {
   return '/api/doc/serve-docx';
 }

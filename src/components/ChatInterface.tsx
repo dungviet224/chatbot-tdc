@@ -21,7 +21,7 @@ interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  sources?: { id?: string; sectionId: string; sectionName: string }[];
+  sources?: { id?: string; sectionId: string; sectionName: string; tag?: string }[];
   timestamp: Date;
 }
 
@@ -129,77 +129,36 @@ function escapeRegExp(string: string) {
 }
 
 /** Format message + inline page icons when sources span multiple pages */
-function formatMessageWithSources(content: string, sources?: { id?: string; sectionId: string; sectionName: string }[]): string {
+function formatMessageWithSources(content: string, sources?: { id?: string; sectionId: string; sectionName: string; tag?: string; pageNum?: number }[]): string {
   if (!sources || sources.length === 0) return formatMessage(content);
 
-  let processedContent = content;
+  let html = formatMessage(content);
 
-  // Tự động chèn [Nguồn X] vào văn bản nếu AI không sinh ra
-  for (const src of sources) {
-    if (!src.id) continue;
-    const marker = `[Nguồn ${src.id}]`;
-    if (!processedContent.includes(marker)) {
-      const sName = shortName(src.sectionName);
-      if (sName && sName.length > 3) {
-        // Tìm tên section trong văn bản để đính badge ngay vào phần đó
-        const regex = new RegExp(`(${escapeRegExp(sName)})`, 'i');
-        if (regex.test(processedContent)) {
-          processedContent = processedContent.replace(regex, `$1 ${marker}`);
-        }
-      }
-    }
-  }
-
-
-
-  // Lọc bỏ các Nguồn trùng lặp nằm liên tiếp nhau (cùng 1 link thì để lại cái cuối)
-  const finalLines = processedContent.split('\n');
-  for (const src of sources) {
-    if (!src.id) continue;
-    const markerStr = `[Nguồn ${src.id}]`;
-    const markerRegex = new RegExp(`\\[Nguồn\\s*${src.id}\\]`, 'g');
-    
-    let isTrackingCluster = false;
-    for (let i = finalLines.length - 1; i >= 0; i--) {
-      const line = finalLines[i].trim();
-      if (line === '') continue;
+  // Replace each source tag (e.g. [PHẦN 4]) with a link
+  if (sources) {
+    for (const src of sources) {
+      if (!src.tag) continue;
       
-      const hasMarker = finalLines[i].includes(markerStr);
-      if (hasMarker) {
-        if (isTrackingCluster) {
-          // Đang trong cụm liền kề có chung nguồn -> xóa nguồn ở các dòng trên
-          finalLines[i] = finalLines[i].replace(markerRegex, '');
-        } else {
-          // Bắt đầu 1 cụm mới từ dưới lên -> giữ lại cái cuối này, nhưng xóa lặp nếu trên cùng 1 dòng
-          const matches = [...finalLines[i].matchAll(markerRegex)];
-          if (matches.length > 1) {
-            let count = 0;
-            finalLines[i] = finalLines[i].replace(markerRegex, (match) => {
-              count++;
-              return count === matches.length ? match : '';
-            });
-          }
-          isTrackingCluster = true;
-        }
-      } else {
-        // Gặp dòng không chứa nguồn này -> ngắt cụm
-        isTrackingCluster = false;
-      }
-    }
-  }
-  processedContent = finalLines.join('\n');
-
-  let html = formatMessage(processedContent);
-
-  // Thay thế [Nguồn X] bằng thẻ badge
-  html = html.replace(/\[Nguồn\s*(\d+)\]/g, (match, p1) => {
-    const src = sources.find(s => s.id === p1);
-    if (src) {
+      const tagRegex = new RegExp(escapeRegExp(src.tag), 'gi');
       const anchor = src.sectionId ? `#${src.sectionId}` : '';
-      return `<a href="/api/doc/serve-html${anchor}" target="_blank" rel="noopener noreferrer" class="msg-inline-badge" title="${src.sectionName}"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${shortName(src.sectionName)}</a>`;
+      const pageNum = src.pageNum || 1;
+      const displayTag = src.tag.replace(/^\[|\]$/g, '');
+      const badgeHtml = `<a href="/sotaynhanvien.pdf#page=${pageNum}" target="_blank" rel="noopener noreferrer" class="msg-inline-badge" title="${src.sectionName} (Tr.${pageNum})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${displayTag}</a>`;
+      
+      html = html.replace(tagRegex, badgeHtml);
     }
-    return match;
-  });
+
+    // Dự phòng trường hợp AI vẫn dùng [Nguồn X]
+    html = html.replace(/\[Nguồn\s*(\d+)\]/gi, (match, p1) => {
+      const src = sources.find(s => s.id === p1);
+      if (src) {
+        const pageNum = src.pageNum || 1;
+        const displayTag = src.tag ? src.tag.replace(/^\[|\]$/g, '') : shortName(src.sectionName);
+        return `<a href="/sotaynhanvien.pdf#page=${pageNum}" target="_blank" rel="noopener noreferrer" class="msg-inline-badge" title="${src.sectionName} (Tr.${pageNum})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${displayTag}</a>`;
+      }
+      return match;
+    });
+  }
 
   return html;
 }
@@ -311,7 +270,7 @@ export default function ChatInterface() {
         let accumulated = '';
         let clientBuffer = '';
         let isDone = false;
-        let lastSources: { id?: string; sectionId: string; sectionName: string }[] = [];
+        let lastSources: { id?: string; sectionId: string; sectionName: string; tag?: string }[] = [];
         let docViewerUrl = 'https://docs.google.com/viewer?url=';
 
         while (!isDone) {

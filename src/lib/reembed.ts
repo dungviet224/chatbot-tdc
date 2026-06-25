@@ -12,6 +12,7 @@ import {
   getWritableDir,
   getSourceUrl,
 } from './file-store';
+import { loadOutlineItems, saveOutlineItems, OutlineItem } from './outline-store';
 
 const BATCH_SIZE = 20;
 const CHUNK_MAX_SIZE = 450;
@@ -299,6 +300,38 @@ if (location.hash) {
   } catch { /* Vercel read-only */ }
 
   console.log(`[Reembed] ✅ Saved ${embedded.length} chunks -> ${outPath}`);
+
+  // -- Bóc tách Outline từ sectionMap và lưu vào page-mapping.json --
+  const existingOutline = loadOutlineItems();
+  const existingMap = new Map<string, OutlineItem>();
+  existingOutline.forEach(item => existingMap.set(item.text.trim().toLowerCase(), item));
+
+  const newOutline: OutlineItem[] = [];
+  let secIdx = 1;
+  sectionMap.forEach((name, id) => {
+    const cleanName = name.trim();
+    if (!cleanName) return;
+    const lowerName = cleanName.toLowerCase();
+    
+    // Nếu section này đã có trong file cấu hình, giữ nguyên page number của nó
+    if (existingMap.has(lowerName)) {
+      newOutline.push(existingMap.get(lowerName)!);
+    } else {
+      // Nếu là section mới, gán page = 1 (admin sẽ tự sửa sau)
+      newOutline.push({
+        id: `sec-${secIdx}`,
+        text: cleanName,
+        level: cleanName.startsWith('PHẦN') ? 1 : 2,
+        page: 1
+      });
+    }
+    secIdx++;
+  });
+
+  if (newOutline.length > 0) {
+    saveOutlineItems(newOutline);
+    console.log(`[Reembed] ✅ Saved ${newOutline.length} items to page-mapping.json`);
+  }
 
   return {
     chunks: embedded.length,

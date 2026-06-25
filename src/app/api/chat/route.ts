@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loadAndEmbedDocument, retrieveRelevantChunks } from '@/lib/docLoader';
 import { getConfig } from '@/lib/cfg-store';
+import { findPageForSection } from '@/lib/document-outline';
 
 const API_BASE = process.env.CHAT_API_BASE || 'http://mbasic8.pikamc.vn:25246/v1';
 const API_KEY = process.env.CHAT_API_KEY || 'sk-987312a0a1689afc-m1wrjj-666571e0';
@@ -9,6 +10,7 @@ const MODEL = process.env.CHAT_MODEL || 'oc/deepseek-v4-flash-free';
 interface SourceLink {
   sectionId: string;
   sectionName: string;
+  tag?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -49,12 +51,27 @@ export async function POST(req: NextRequest) {
     const contextLines: string[] = [];
     let sourceIndex = 1;
     for (const [name, data] of sectionsMap.entries()) {
+      let tagValue = name;
+      const match = name.match(/^(PHẦN\s+\d+[A-Z]?|\d+\.\d+\.\d+|\d+\.\d+|\d+)/i);
+      if (match) {
+        let val = match[1].toUpperCase();
+        val = val.replace(/\.$/, '');
+        if (/^\d/.test(val)) {
+          val = 'PHẦN ' + val;
+        }
+        tagValue = val;
+      }
+      const tag = `[${tagValue}]`;
+
+      const pageNum = findPageForSection(name);
       sourceLinks.push({
         id: sourceIndex.toString(),
         sectionId: data.sectionId,
-        sectionName: name
+        sectionName: name,
+        tag: tag,
+        pageNum: pageNum
       });
-      contextLines.push(`[Nguồn ${sourceIndex}]\n${data.content}`);
+      contextLines.push(`Tag nguồn: ${tag}\nTên phần: ${name} (Trang ${pageNum})\nNội dung:\n${data.content}`);
       sourceIndex++;
     }
 
@@ -77,7 +94,7 @@ export async function POST(req: NextRequest) {
       ...(userRules ? [] : [
         'QUY TẮC BẮT BUỘC:',
         '1. Thông tin trả lời PHẢI CÓ trong dữ liệu trên. Tuyệt đối không bịa, suy đoán, hay thêm thông tin tự biết.',
-        '2. Khi dùng thông tin từ Nguồn nào, BẮT BUỘC chèn thẻ [Nguồn X] (X là số của Nguồn) ngay sau câu chứa thông tin đó. Ví dụ: "...hưởng 85% lương cơ bản [Nguồn 1]." (Trích dẫn phải nằm ngay vị trí nội dung, không dồn xuống cuối).',
+        '2. MỖI CÂU TRẢ LỜI ĐỀU PHẢI BẮT ĐẦU bằng Tag nguồn tương ứng. Ví dụ: "[PHẦN 4] Theo quy định, nhân viên được hưởng..."',
         '3. Nếu thông tin THỰC SỰ KHÔNG CÓ trong dữ liệu: trả lời "Tôi không tìm thấy thông tin này trong Sổ Tay Nhân Viên."',
         '4. Nếu câu hỏi KHÔNG LIÊN QUAN đến chính sách/nội quy/nhân sự: trả lời "Tôi chỉ hỗ trợ các câu hỏi liên quan đến Sổ Tay Nhân Viên TDConsulting."',
         '5. Không thay đổi bất kỳ con số, ngày tháng, tỉ lệ nào trong tài liệu.',

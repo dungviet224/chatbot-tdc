@@ -281,9 +281,85 @@ function DocumentsTab({ embed, onUpload }: { embed: EmbedData; onUpload: (f: Fil
   );
 }
 
+// ── Outline Tab ──
+function OutlineTab() {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetch('/api/cfg/outline')
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) setItems(d.items);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true); setMsg('');
+    try {
+      const res = await fetch('/api/cfg/outline/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      const d = await res.json();
+      setMsg(d.success ? '✅ Đã lưu cấu hình sơ đồ' : '❌ Lỗi: ' + d.error);
+    } catch {
+      setMsg('❌ Lỗi kết nối');
+    }
+    setSaving(false);
+  };
+
+  if (loading) return <div className="cfg-tab-content"><Loader2 className="spin" /> Đang tải sơ đồ...</div>;
+
+  return (
+    <div className="cfg-tab-content">
+      <div className="cfg-section">
+        <h3><FileText size={18} /> Quản lý trang Sổ Tay</h3>
+        <p className="cfg-hint">Danh sách các Phần sẽ tự động được lấy từ file DOCX khi bạn tải lên. Bạn chỉ cần điều chỉnh số trang ở đây cho khớp với file PDF để hiển thị đúng Nguồn trích dẫn.</p>
+        
+        <div style={{ marginTop: '16px', maxHeight: '50vh', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: '8px', padding: '12px' }}>
+          {items.map((item, idx) => (
+            <div key={item.id} style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '12px' }}>
+              <div style={{ flex: 1, paddingLeft: item.level === 1 ? '0' : '20px', fontWeight: item.level === 1 ? '600' : '400', fontSize: '14px' }}>
+                {item.text}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '13px', color: 'var(--color-text-dim)' }}>Trang:</span>
+                <input 
+                  type="number" 
+                  min="1" 
+                  value={item.page} 
+                  onChange={e => {
+                    const newItems = [...items];
+                    newItems[idx].page = parseInt(e.target.value) || 1;
+                    setItems(newItems);
+                  }}
+                  style={{ width: '60px', padding: '4px 8px', borderRadius: '4px', border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button className="cfg-btn cfg-btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 size={16} className="spin" /> : <Save size={16} />} Lưu sơ đồ trang
+          </button>
+          {msg && <span className={`cfg-save-msg ${msg.startsWith('✅') ? 'ok' : 'err'}`}>{msg}</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Dashboard ──
 function Dashboard({ onLogout }: { onLogout: () => void }) {
-  const [tab, setTab] = useState<'api' | 'rules' | 'docs'>('api');
+  const [tab, setTab] = useState<'api' | 'rules' | 'docs' | 'outline'>('api');
   const [config, setConfig] = useState<ConfigData>({
     apiBase: '', apiKey: '', embedModel: '', chatModel: '', rules: '',
   });
@@ -389,6 +465,8 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           onClick={() => setTab('rules')}><FileText size={16} /> Rules</button>
         <button role="tab" aria-selected={tab === 'docs'} className={`cfg-tab ${tab === 'docs' ? 'active' : ''}`}
           onClick={() => setTab('docs')}><Upload size={16} /> Documents</button>
+        <button role="tab" aria-selected={tab === 'outline'} className={`cfg-tab ${tab === 'outline' ? 'active' : ''}`}
+          onClick={() => setTab('outline')}><FileText size={16} /> Outline</button>
       </nav>
 
       {/* Body */}
@@ -396,6 +474,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         {tab === 'api' && <ApiConfigTab config={config} onChange={handleConfigChange} />}
         {tab === 'rules' && <RulesTab config={config} onChange={handleConfigChange} />}
         {tab === 'docs' && <DocumentsTab embed={embed} onUpload={handleUpload} />}
+        {tab === 'outline' && <OutlineTab />}
       </main>
 
       {/* Footer */}

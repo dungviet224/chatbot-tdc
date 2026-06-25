@@ -11,7 +11,7 @@ export const OUTLINE_ITEMS: OutlineItem[] = [
   { id: 'sec-3', text: '1.2. Tầm nhìn', level: 2, page: 4 },
   { id: 'sec-4', text: '1.3. Giá trị cốt lõi', level: 2, page: 4 },
   { id: 'sec-5', text: '1.4. Sơ đồ tổ chức - TD Consulting', level: 2, page: 4 },
-  { id: 'sec-6', text: '1.5. Sơ đồ tổ chức - TD Games', level: 2, page: 4 },
+  { id: 'sec-6', text: '1.5. Sơ đồ tổ chức - TD Games', level: 2, page: 5 },
   { id: 'sec-7', text: 'PHẦN 1B: TIÊU CHÍ HÀNH VI & VĂN HÓA LÀM VIỆC', level: 1, page: 6 },
   { id: 'sec-8', text: 'PHẦN 2: TỔNG ĐÃI NGỘ', level: 1, page: 7 },
   { id: 'sec-9', text: '2.1. Lương Gross', level: 2, page: 7 },
@@ -55,13 +55,17 @@ export const OUTLINE_ITEMS: OutlineItem[] = [
   { id: 'sec-47', text: '11.5. Daily Plan là cam kết cá nhân', level: 2, page: 22 },
 ];
 
+import { loadOutlineItems } from './outline-store';
+
 export function findPageForSection(secName: string): number {
   // Decode HTML entities (e.g. &amp; → &)
   const decoded = secName.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
   const cleanSearch = decoded.trim().toLowerCase();
 
+  const items = loadOutlineItems();
+
   // 1. Khớp chính xác
-  const exactMatch = OUTLINE_ITEMS.find(item => {
+  const exactMatch = items.find(item => {
     const cleanItemText = item.text.toLowerCase()
       .replace(/^(phần\s+\d+[a-z]?:\s*|\d+(\.\d+)*\.\s*)/i, '')
       .trim();
@@ -70,10 +74,10 @@ export function findPageForSection(secName: string): number {
   if (exactMatch) return exactMatch.page;
 
   // 2. Khớp tương đối (substring)
-  let bestMatch = OUTLINE_ITEMS[0];
+  let bestMatch = items[0];
   let bestScore = 0;
   
-  OUTLINE_ITEMS.forEach(item => {
+  items.forEach(item => {
     const cleanItemText = item.text.toLowerCase()
       .replace(/^(phần\s+\d+[a-z]?:\s*|\d+(\.\d+)*\.\s*)/i, '')
       .trim();

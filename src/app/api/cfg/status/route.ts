@@ -3,6 +3,7 @@ import { getConfig } from '@/lib/cfg-store';
 import { getEmbeddingStatus } from '@/lib/docLoader';
 import path from 'path';
 import fs from 'fs';
+import { getDocxPath } from '@/lib/file-store';
 
 function checkAuth(req: NextRequest): boolean {
   return req.cookies.get('cfg_token')?.value === 'authenticated';
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
 
   const config = getConfig();
   const embedStatus = getEmbeddingStatus();
-  const dataPath = path.join(process.cwd(), 'public', 'embeddings-data.json');
+  const dataPath = getDocxPath();
   let docUpdatedAt = config.docUpdatedAt || null;
   let fileSize = 0;
   try {
