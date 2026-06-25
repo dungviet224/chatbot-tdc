@@ -11,6 +11,7 @@ interface SourceLink {
   sectionId: string;
   sectionName: string;
   tag?: string;
+  pageNum?: number;
 }
 
 export async function POST(req: NextRequest) {
