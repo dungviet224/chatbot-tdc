@@ -134,33 +134,30 @@ function formatMessageWithSources(content: string, sources?: { id?: string; sect
 
   let html = formatMessage(content);
 
-  // Tạo một mảng lưu các thẻ tag để hiện ở đầu tin nhắn
-  const uniqueTags = new Map<string, string>();
-
+  // Replace each source tag (e.g. [PHẦN 4]) with a link
   if (sources) {
     for (const src of sources) {
       if (!src.tag) continue;
       
+      const tagRegex = new RegExp(escapeRegExp(src.tag), 'gi');
+      const anchor = src.sectionId ? `#${src.sectionId}` : '';
       const pageNum = src.pageNum || 1;
       const displayTag = src.tag.replace(/^\[|\]$/g, '');
       const badgeHtml = `<a href="/sotaynhanvien.pdf#page=${pageNum}" target="_blank" rel="noopener noreferrer" class="msg-inline-badge" title="${src.sectionName} (Tr.${pageNum})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${displayTag}</a>`;
       
-      // Xoá tag AI sinh ra trong text nếu có (bao gồm cả trường hợp AI quên dấu ngoặc vuông)
-      const rawTag = displayTag;
-      const tagRegex = new RegExp(`\\[?${escapeRegExp(rawTag)}\\]?[:\\.\\-]?\\s*`, 'gi');
-      html = html.replace(tagRegex, '');
-
-      uniqueTags.set(src.tag, badgeHtml);
+      html = html.replace(tagRegex, badgeHtml);
     }
 
-    // Dự phòng xoá [Nguồn X] do AI sinh ra
-    html = html.replace(/\[Nguồn\s*(\d+)\]/gi, '');
-
-    // Nối các badge lại và đặt lên đầu tin nhắn
-    if (uniqueTags.size > 0) {
-      const badgesWrapper = `<div style="margin-bottom: 8px; display: flex; flex-wrap: wrap; gap: 6px;">${Array.from(uniqueTags.values()).join('')}</div>`;
-      html = badgesWrapper + html;
-    }
+    // Dự phòng trường hợp AI vẫn dùng [Nguồn X]
+    html = html.replace(/\[Nguồn\s*(\d+)\]/gi, (match, p1) => {
+      const src = sources.find(s => s.id === p1);
+      if (src) {
+        const pageNum = src.pageNum || 1;
+        const displayTag = src.tag ? src.tag.replace(/^\[|\]$/g, '') : shortName(src.sectionName);
+        return `<a href="/sotaynhanvien.pdf#page=${pageNum}" target="_blank" rel="noopener noreferrer" class="msg-inline-badge" title="${src.sectionName} (Tr.${pageNum})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${displayTag}</a>`;
+      }
+      return match;
+    });
   }
 
   return html;

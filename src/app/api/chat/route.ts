@@ -30,8 +30,16 @@ export async function POST(req: NextRequest) {
     const baseUrl = `${proto}://${host}`;
     const docxUrl = `${baseUrl}/api/doc/serve-docx`;
     const docViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(docxUrl)}&embedded=true`;
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user');
-    const userQuery = lastUserMsg?.content ?? '';
+    const userMessages = messages.filter((m: any) => m.role === 'user');
+    const lastUserMsg = userMessages[userMessages.length - 1];
+    let userQuery = lastUserMsg?.content ?? '';
+
+    // Nếu câu hỏi ngắn (thường là follow-up), ghép thêm ngữ cảnh từ câu hỏi liền trước
+    if (userMessages.length >= 2 && userQuery.split(' ').length <= 20) {
+      const prevUserMsg = userMessages[userMessages.length - 2];
+      // Nối câu trước và câu hiện tại để embedding model hiểu được Context
+      userQuery = `${prevUserMsg.content}. ${userQuery}`;
+    }
 
     // Lấy chunks liên quan bằng embedding + cosine similarity
     const relevantChunks = await retrieveRelevantChunks(userQuery, 5);
@@ -94,9 +102,10 @@ export async function POST(req: NextRequest) {
       ...(userRules ? [] : [
         'QUY TẮC BẮT BUỘC:',
         '1. Thông tin trả lời PHẢI CÓ trong dữ liệu trên. Tuyệt đối không bịa, suy đoán, hay thêm thông tin tự biết.',
-        '2. Nếu thông tin THỰC SỰ KHÔNG CÓ trong dữ liệu: trả lời "Tôi không tìm thấy thông tin này trong Sổ Tay Nhân Viên."',
-        '3. Nếu câu hỏi KHÔNG LIÊN QUAN đến chính sách/nội quy/nhân sự: trả lời "Tôi chỉ hỗ trợ các câu hỏi liên quan đến Sổ Tay Nhân Viên TDConsulting."',
-        '4. Không thay đổi bất kỳ con số, ngày tháng, tỉ lệ nào trong tài liệu.',
+        '2. MỖI CÂU TRẢ LỜI ĐỀU PHẢI BẮT ĐẦU bằng Tag nguồn tương ứng. Ví dụ: "[PHẦN 4] Theo quy định, nhân viên được hưởng..."',
+        '3. Nếu thông tin THỰC SỰ KHÔNG CÓ trong dữ liệu: trả lời "Tôi không tìm thấy thông tin này trong Sổ Tay Nhân Viên."',
+        '4. Nếu câu hỏi KHÔNG LIÊN QUAN đến chính sách/nội quy/nhân sự: trả lời "Tôi chỉ hỗ trợ các câu hỏi liên quan đến Sổ Tay Nhân Viên TDConsulting."',
+        '5. Không thay đổi bất kỳ con số, ngày tháng, tỉ lệ nào trong tài liệu.',
         '',
         'ĐỊNH DẠNG TRẢ LỜI:',
         '- Tiếng Việt, ngắn gọn, chuyên nghiệp',
