@@ -104,7 +104,7 @@ function shortName(name: string): string {
 }
 
 /** Source badges: pill tags with section name at end of message */
-function renderSourceBadges(sources: { sectionId: string; sectionName: string }[]): string {
+function renderSourceBadges(sources: { sectionId: string; sectionName: string; pageNum?: number }[]): string {
   const seen = new Set<string>();
   const unique = sources.filter(s => {
     const key = s.sectionName.trim();
@@ -119,7 +119,7 @@ function renderSourceBadges(sources: { sectionId: string; sectionName: string }[
   const extra = unique.length - MAX;
 
   return `<span class="msg-sources-inline">${show.map(s => {
-    const pageNum = findPageForSection(s.sectionName);
+    const pageNum = s.pageNum || 1;
     return `<a href="/sotaynhanvien.pdf#page=${pageNum}" target="_blank" rel="noopener noreferrer" class="source-badge" title="${s.sectionName} (Tr.${pageNum})">${shortName(s.sectionName)}</a>`;
   }).join('')}${extra > 0 ? `<span class="source-badge source-badge-more" title="${unique.slice(MAX).map(s => s.sectionName).join(' • ')}">+${extra}</span>` : ''}</span>`;
 }
