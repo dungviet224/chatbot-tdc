@@ -77,9 +77,8 @@ export async function POST(req: NextRequest) {
       success: true,
       message: `✅ Đã upload file PDF thành công`,
     });
-  } catch (e) {
-    console.error('[Upload PDF]', e);
-    require('fs').writeFileSync('error.log', String(e) + '\n' + (e.stack || ''), { flag: 'a' });
+  } catch (e: any) {
+    console.error('[API Upload PDF]', e);
     return NextResponse.json({ success: false, error: String(e) }, { status: 500 });
   }
 }

@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
-  const config = getConfig();
+  const config = await getConfig();
   const embedStatus = await getEmbeddingStatus();
 
   // Lấy thông tin file PDF từ Storage

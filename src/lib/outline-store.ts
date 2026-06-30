@@ -26,7 +26,7 @@ export async function loadOutlineItems(): Promise<OutlineItem[]> {
     }));
   } catch (e) {
     console.error('[OutlineStore] Failed to load from DB', e);
-    return DEFAULT_OUTLINE;
+    return [];
   }
 }
 

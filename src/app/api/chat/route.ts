@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
 
 
 
-    const cfg = getConfig();
+    const cfg = await getConfig();
     const { data: files } = await supabaseAdmin.storage.from('documents').list();
     const pdfFileName = files?.find(f => f.name.toLowerCase().endsWith('.pdf'))?.name || null;
     const displayFileName = pdfFileName || cfg.docFile || 'sotaynhanvien.docx';
