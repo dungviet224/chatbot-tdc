@@ -11,8 +11,9 @@ import {
 const ADMIN_USER = process.env.CFG_ADMIN_USER;
 const ADMIN_PASS = process.env.CFG_ADMIN_PASS;
 
+// Cảnh báo nếu thiếu trên production
 if (process.env.NODE_ENV === 'production' && (!ADMIN_USER || !ADMIN_PASS)) {
-  throw new Error('Thiếu biến môi trường CFG_ADMIN_USER hoặc CFG_ADMIN_PASS trên Production');
+  console.warn('⚠️ WARNING: Thiếu biến môi trường CFG_ADMIN_USER hoặc CFG_ADMIN_PASS trên Production. Hãy thêm vào Vercel Environment Variables để đăng nhập được.');
 }
 
 export async function POST(req: NextRequest) {
