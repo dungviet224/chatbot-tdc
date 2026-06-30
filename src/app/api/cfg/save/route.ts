@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { saveConfig, getConfig } from '@/lib/cfg-store';
-
-function checkAuth(req: NextRequest): boolean {
-  return req.cookies.get('cfg_token')?.value === 'authenticated';
-}
+import { saveConfig } from '@/lib/cfg-store';
+import { checkAuth } from '@/lib/auth';
 
 export async function POST(req: NextRequest) {
-  if (!checkAuth(req)) {
+  if (!await checkAuth(req)) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     const body = await req.json();
-    const saved = saveConfig(body);
+    const saved = await saveConfig(body);
     return NextResponse.json({
       success: true,
       config: {

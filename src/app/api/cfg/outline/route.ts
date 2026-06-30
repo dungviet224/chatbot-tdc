@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loadOutlineItems } from '@/lib/outline-store';
-
-function checkAuth(req: NextRequest): boolean {
-  return req.cookies.get('cfg_token')?.value === 'authenticated';
-}
+import { checkAuth } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
-  if (!checkAuth(req)) {
+  if (!await checkAuth(req)) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    const items = loadOutlineItems();
+    const items = await loadOutlineItems();
     return NextResponse.json({ success: true, items });
   } catch (e) {
     return NextResponse.json({ success: false, error: String(e) }, { status: 500 });

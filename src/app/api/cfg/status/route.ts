@@ -1,40 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConfig } from '@/lib/cfg-store';
 import { getEmbeddingStatus } from '@/lib/docLoader';
-import path from 'path';
-import fs from 'fs';
-import { getDocxPath } from '@/lib/file-store';
-
-function checkAuth(req: NextRequest): boolean {
-  return req.cookies.get('cfg_token')?.value === 'authenticated';
-}
+import { supabaseAdmin } from '@/lib/supabase';
+import { checkAuth } from '@/lib/auth';
 
 export async function GET(req: NextRequest) {
-  if (!checkAuth(req)) {
+  if (!await checkAuth(req)) {
     return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
   }
 
   const config = getConfig();
-  const embedStatus = getEmbeddingStatus();
-  const dataPath = getDocxPath();
-  let docUpdatedAt = config.docUpdatedAt || null;
-  let fileSize = 0;
-  try {
-    if (fs.existsSync(dataPath)) {
-      const stat = fs.statSync(dataPath);
-      fileSize = stat.size;
-      if (!docUpdatedAt) docUpdatedAt = stat.mtime.toISOString();
-    }
-  } catch {}
+  const embedStatus = await getEmbeddingStatus();
 
-  // Lấy base URL từ request headers để tạo link Google Docs Viewer
-  const proto = req.headers.get('x-forwarded-proto') || 'https';
-  const host = req.headers.get('host') || 'chatbot-tdc.vercel.app';
-  const baseUrl = `${proto}://${host}`;
-  const docxUrl = `${baseUrl}/api/doc/serve-docx`;
-  const docUrl = embedStatus.ready 
-    ? `https://docs.google.com/viewer?url=${encodeURIComponent(docxUrl)}&embedded=true`
-    : null;
+  // Lấy thông tin file PDF từ Storage
+  const { data: files } = await supabaseAdmin.storage.from('documents').list();
+  const pdfFileObj = files?.find(f => f.name.toLowerCase().endsWith('.pdf'));
+  const pdfFileName = pdfFileObj?.name || null;
+  
+  // Tên file hiển thị: ưu tiên PDF, nếu không có thì dùng DOCX
+  const displayFileName = pdfFileName || config.docFile || null;
+  
+  // Lấy dung lượng của file đang được hiển thị
+  const displayFileObj = files?.find(f => f.name === displayFileName);
+  const fileSize = displayFileObj?.metadata?.size || 0;
+
+  const fileUrl = displayFileName ? `${process.env.SUPABASE_URL}/storage/v1/object/public/documents/${encodeURIComponent(displayFileName)}` : null;
+  
+  let finalDocUrl = fileUrl;
+  if (fileUrl && displayFileName?.toLowerCase().endsWith('.docx')) {
+    finalDocUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(fileUrl)}`;
+  }
+  
+  const docUrl = embedStatus.ready ? finalDocUrl : null;
 
   return NextResponse.json({
     success: true,
@@ -48,9 +45,9 @@ export async function GET(req: NextRequest) {
     embed: {
       ready: embedStatus.ready,
       totalChunks: embedStatus.totalChunks,
-      docUpdatedAt,
-      fileSize,
-      docFile: config.docFile || null,
+      docUpdatedAt: config.docUpdatedAt || null,
+      fileSize: fileSize,
+      docFile: pdfFileName || config.docFile || null, // Trả về tên file PDF để hiển thị đúng tên
       docUrl,
     },
   });

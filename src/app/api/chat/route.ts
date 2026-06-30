@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { loadAndEmbedDocument, retrieveRelevantChunks } from '@/lib/docLoader';
+import { retrieveRelevantChunks } from '@/lib/docLoader';
 import { getConfig } from '@/lib/cfg-store';
 import { findPageForSection } from '@/lib/document-outline';
+import { supabaseAdmin } from '@/lib/supabase';
+
+// ── Rate Limiting: tối đa 30 requests/phút/IP ────────────────────────────────
+const _rateMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = _rateMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    _rateMap.set(ip, { count: 1, resetAt: now + 60_000 });
+    return true; // OK
+  }
+  if (entry.count >= 30) return false; // vượt giới hạn
+  entry.count++;
+  return true;
+}
 
 const API_BASE = process.env.CHAT_API_BASE || 'http://mbasic8.pikamc.vn:25246/v1';
 const API_KEY = process.env.CHAT_API_KEY || 'sk-987312a0a1689afc-m1wrjj-666571e0';
@@ -16,21 +32,34 @@ interface SourceLink {
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limiting
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+    if (!checkRateLimit(ip)) {
+      return NextResponse.json(
+        { error: 'Quá nhiều yêu cầu. Vui lòng chờ 1 phút.' },
+        { status: 429 }
+      );
+    }
+
     const { messages } = await req.json();
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
     }
 
-    // Đảm bảo document đã được load & embedded
-    await loadAndEmbedDocument();
 
-    // Lấy base URL từ request headers
-    const proto = req.headers.get('x-forwarded-proto') || 'https';
-    const host = req.headers.get('host') || 'chatbot-tdc.vercel.app';
-    const baseUrl = `${proto}://${host}`;
-    const docxUrl = `${baseUrl}/api/doc/serve-docx`;
-    const docViewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(docxUrl)}&embedded=true`;
+
+    const cfg = getConfig();
+    const { data: files } = await supabaseAdmin.storage.from('documents').list();
+    const pdfFileName = files?.find(f => f.name.toLowerCase().endsWith('.pdf'))?.name || null;
+    const displayFileName = pdfFileName || cfg.docFile || 'sotaynhanvien.docx';
+    
+    const fileUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/documents/${encodeURIComponent(displayFileName)}`;
+    let docViewerUrl = fileUrl;
+    if (displayFileName?.toLowerCase().endsWith('.docx')) {
+      docViewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(fileUrl)}`;
+    }
+    
     const userMessages = messages.filter((m: any) => m.role === 'user');
     const lastUserMsg = userMessages[userMessages.length - 1];
     let userQuery = lastUserMsg?.content ?? '';
@@ -42,8 +71,8 @@ export async function POST(req: NextRequest) {
       userQuery = `${prevUserMsg.content}. ${userQuery}`;
     }
 
-    // Lấy chunks liên quan bằng embedding + cosine similarity
-    const relevantChunks = await retrieveRelevantChunks(userQuery, 5);
+    // Lấy chunks liên quan bằng embedding + cosine similarity (8 chunks để đảm bảo đủ ngữ cảnh)
+    const relevantChunks = await retrieveRelevantChunks(userQuery, 8);
 
     // Gom nhóm chunks theo sectionName
     const sectionsMap = new Map<string, { sectionId: string; content: string }>();
@@ -72,7 +101,7 @@ export async function POST(req: NextRequest) {
       }
       const tag = `[${tagValue}]`;
 
-      const pageNum = findPageForSection(name);
+      const pageNum = await findPageForSection(name);
       sourceLinks.push({
         id: sourceIndex.toString(),
         sectionId: data.sectionId,
@@ -87,7 +116,6 @@ export async function POST(req: NextRequest) {
     const contextText = contextLines.join('\n\n---\n\n');
 
     // Đọc rules từ config
-    const cfg = getConfig();
     const userRules = cfg.rules || '';
 
     const systemPrompt = [
@@ -109,10 +137,12 @@ export async function POST(req: NextRequest) {
         '5. Không thay đổi bất kỳ con số, ngày tháng, tỉ lệ nào trong tài liệu.',
         '',
         'ĐỊNH DẠNG TRẢ LỜI:',
-        '- Tiếng Việt, ngắn gọn, chuyên nghiệp',
+        '- Tiếng Việt, trình bày chi tiết, đầy đủ, rõ ràng và chuyên nghiệp',
+        '- Giải thích cặn kẽ các ý quan trọng trong chính sách để người dùng dễ hiểu',
         '- Dùng **in đậm** cho số liệu quan trọng (ngày, %, deadline)',
         '- Dùng "- item" khi liệt kê nhiều mục',
         '- Xưng "tôi", gọi người dùng là "bạn"',
+        '- TUYỆT ĐỐI KHÔNG sử dụng biểu tượng cảm xúc (emoji / icon) trong văn bản',
       ]),
       '',
     ].join('\n');

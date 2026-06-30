@@ -1,53 +1,22 @@
 /**
  * Re-embed: parse DOCX → chunk → API embedding → save JSON + HTML
- * Khi upload file mới, sinh file HTML công khai có anchor theo section
+ * Cập nhật: Lưu thẳng lên Supabase Postgres (pgvector)
  */
 
-import path from 'path';
-import fs from 'fs';
 import { getConfig } from './cfg-store';
-import {
-  getDocHtmlPath,
-  getEmbeddingsJsonPath,
-  getWritableDir,
-  getSourceUrl,
-} from './file-store';
 import { loadOutlineItems, saveOutlineItems, OutlineItem } from './outline-store';
+import { getEmbeddingBatch } from './embeddings';
+import { supabaseAdmin } from './supabase';
+import { uploadFileToSupabase } from './file-store';
 
-const BATCH_SIZE = 20;
 const CHUNK_MAX_SIZE = 450;
 const CHUNK_OVERLAP = 80;
-
-async function callEmbedAPI(texts: string[], apiBase: string, apiKey: string, model: string): Promise<number[][] | null> {
-  try {
-    const res = await fetch(`${apiBase}/embeddings`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        input: texts.map(t => t.slice(0, 8000)),
-      }),
-      signal: AbortSignal.timeout(120000),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const embeddings: number[][] = data?.data
-      ?.sort((a: any, b: any) => a.index - b.index)
-      .map((d: any) => d.embedding);
-    if (Array.isArray(embeddings) && embeddings.length === texts.length) return embeddings;
-    return null;
-  } catch {
-    return null;
-  }
-}
 
 function chunkText(fullText: string): { chunk: string; sectionIds: string[] }[] {
   const lines = fullText.split('\n').map(s => s.trimEnd());
   const sections: { heading: string; content: string[]; sectionIds: string[] }[] = [];
   let h = '', cl: string[] = [], sids: string[] = [];
+  
   for (const line of lines) {
     const t = line.trim();
     if (!t) continue;
@@ -87,22 +56,9 @@ function chunkText(fullText: string): { chunk: string; sectionIds: string[] }[] 
   return result.filter(c => c.chunk.trim().length > 30).filter(c => { const k = c.chunk.substring(0, 50); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
-async function embedChunks(chunks: string[], apiBase: string, apiKey: string, model: string): Promise<number[][]> {
-  const embedded: number[][] = [];
-  for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
-    const batch = chunks.slice(i, i + BATCH_SIZE);
-    const vecs = await callEmbedAPI(batch, apiBase, apiKey, model);
-    if (!vecs) throw new Error(`Embedding batch ${Math.floor(i / BATCH_SIZE)} fail`);
-    embedded.push(...vecs);
-    console.log(`[Reembed] Batch ${Math.min(i + BATCH_SIZE, chunks.length)}/${chunks.length}`);
-  }
-  return embedded;
-}
-
 export interface ReembedResult {
   chunks: number;
   dim: number;
-  file: string;
 }
 
 // Map sectionId → sectionName từ HTML headings
@@ -116,11 +72,6 @@ function extractSectionMap(html: string): Map<string, string> {
     map.set(match[3], cleanText);
   }
   return map;
-}
-
-export interface SectionMeta {
-  id: string;
-  name: string;
 }
 
 // Style cho HTML công khai
@@ -141,55 +92,19 @@ ul, ol { margin: 8px 0 12px 24px; }
 li { margin-bottom: 4px; }
 strong { color: #d4227b; }
 hr { border: none; border-top: 1px solid #f5a3cc; margin: 32px 0; }
-
-/* ── Tables ── */
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 16px 0;
-  font-size: 14px;
-}
-th, td {
-  border: 1px solid #d4a0b8;
-  padding: 10px 12px;
-  text-align: left;
-  vertical-align: top;
-}
-th {
-  background: linear-gradient(135deg, #d4227b, #e8559f);
-  color: #fff;
-  font-weight: 600;
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-tr:nth-child(even) td {
-  background: rgba(212, 34, 123, 0.04);
-}
-tr:hover td {
-  background: rgba(212, 34, 123, 0.08);
-}
-
-.highlight {
-  animation: hl-fade 3s ease-out forwards;
-  background: linear-gradient(120deg, rgba(212,34,123,0.12) 0%, transparent 100%);
-  border-radius: 4px; padding: 0 4px; margin: 0 -4px;
-}
-@keyframes hl-fade {
-  0% { background: linear-gradient(120deg, rgba(212,34,123,0.25) 0%, transparent 100%); }
-  100% { background: linear-gradient(120deg, rgba(212,34,123,0.06) 0%, transparent 100%); }
-}
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+th, td { border: 1px solid #d4a0b8; padding: 10px 12px; text-align: left; vertical-align: top; }
+th { background: linear-gradient(135deg, #d4227b, #e8559f); color: #fff; font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: 0.3px; }
+tr:nth-child(even) td { background: rgba(212, 34, 123, 0.04); }
+tr:hover td { background: rgba(212, 34, 123, 0.08); }
+.highlight { animation: hl-fade 3s ease-out forwards; background: linear-gradient(120deg, rgba(212,34,123,0.12) 0%, transparent 100%); border-radius: 4px; padding: 0 4px; margin: 0 -4px; }
+@keyframes hl-fade { 0% { background: linear-gradient(120deg, rgba(212,34,123,0.25) 0%, transparent 100%); } 100% { background: linear-gradient(120deg, rgba(212,34,123,0.06) 0%, transparent 100%); } }
 `;
 
-export async function reembedFromDocx(docxPath: string): Promise<ReembedResult> {
-  const cfg = getConfig();
-  const apiBase = cfg.apiBase || process.env.EMBED_API_BASE || 'http://mbasic8.pikamc.vn:25246/v1';
-  const apiKey = cfg.apiKey || process.env.EMBED_API_KEY || 'sk-987312a0a1689afc-m1wrjj-666571e0';
-  const embedModel = cfg.embedModel || process.env.EMBED_MODEL || 'openrouter/openai/text-embedding-3-large';
-
-  console.log('[Reembed] Parsing DOCX...');
+export async function reembedFromDocx(buffer: Buffer, filename: string = 'sotaynhanvien.docx'): Promise<ReembedResult> {
+  console.log('[Reembed] Parsing DOCX buffer...');
   const mammoth = require('mammoth');
-  const { value: html } = await mammoth.convertToHtml({ path: docxPath });
+  const { value: html } = await mammoth.convertToHtml({ buffer });
 
   // Thêm id="section-N" vào các thẻ heading
   let sectionIndex = 0;
@@ -197,17 +112,14 @@ export async function reembedFromDocx(docxPath: string): Promise<ReembedResult> 
     /<(h[1-6])([^>]*)>/gi,
     (match: string, tag: string, attrs: string) => {
       const id = `section-${sectionIndex++}`;
-      // Nếu đã có id thì ko thay
       if (/id=/.test(attrs)) return match;
       return `<${tag}${attrs} id="${id}">`;
     }
   );
 
-  // Lưu section map
   const sectionMap = extractSectionMap(annotatedHtml);
 
-  // Ghi file HTML công khai
-  const htmlPath = getDocHtmlPath();
+  // Lưu file HTML lên Supabase Storage (thay thế ghi đĩa)
   const fullHtml = `<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -219,40 +131,27 @@ export async function reembedFromDocx(docxPath: string): Promise<ReembedResult> 
 <body>
 ${annotatedHtml}
 <script>
-// Highlight section nếu URL có hash
 if (location.hash) {
   setTimeout(() => {
     const el = document.querySelector(location.hash);
-    if (el) {
-      el.classList.add('highlight');
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    if (el) { el.classList.add('highlight'); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   }, 300);
 }
 </script>
 </body>
 </html>`;
-  fs.mkdirSync(path.dirname(htmlPath), { recursive: true });
-  fs.writeFileSync(htmlPath, fullHtml, 'utf-8');
-  console.log(`[Reembed] ✅ Saved HTML -> ${htmlPath}`);
+  
+  const htmlFilename = filename.replace(/\.docx$/i, '.html');
+  await uploadFileToSupabase(htmlFilename, Buffer.from(fullHtml, 'utf-8'), 'text/html; charset=utf-8');
+  console.log(`[Reembed] ✅ Uploaded HTML to Supabase Storage`);
 
-  // Copy HTML sang public/ để persist qua deploy
-  try {
-    const publicHtml = path.join(process.cwd(), 'public', 'sotaynhanvien.html');
-    fs.writeFileSync(publicHtml, fullHtml, 'utf-8');
-  } catch { /* Vercel read-only */ }
-
-  // Chèn marker section vào text trước khi strip HTML
-  let sectionedHtml = annotatedHtml;
-  // Thay heading có id bằng marker
-  sectionedHtml = sectionedHtml.replace(
+  let sectionedHtml = annotatedHtml.replace(
     /<h([1-6])([^>]*)id="(section-\d+)"([^>]*)>/gi,
     (match: string, _tag: string, _before: string, id: string, _after: string) => {
       return `⸻SECTION:${id}⸻\n${match}`;
     }
   );
 
-  // Strip HTML tags → text
   const text = sectionedHtml
     .replace(/<tr[^>]*>/gi, '\n').replace(/<\/tr>/gi, '')
     .replace(/<t[dh][^>]*>/gi, '').replace(/<\/t[dh]>/gi, ' | ')
@@ -273,69 +172,87 @@ if (location.hash) {
 
   console.log('[Reembed] Embedding via API...');
   const chunkTexts = rawChunks.map(c => c.chunk);
-  const vectors = await embedChunks(chunkTexts, apiBase, apiKey, embedModel);
+  const vectors = await getEmbeddingBatch(chunkTexts);
 
-  const embedded = rawChunks.map((item, i) => {
-    // Lấy sectionId cuối (gần nhất), sectionId đầu là section gốc
+  // Lưu vào Postgres (pgvector)
+  console.log('[Reembed] Lưu vào Vector Database...');
+  
+  // 1. Xóa toàn bộ dữ liệu cũ
+  await supabaseAdmin.from('document_chunks').delete().neq('id', -1);
+
+  // 2. Chèn dữ liệu mới (lưu ý: Postgres vector nhận chuỗi '[0.1, 0.2]')
+  const dbRows = rawChunks.map((item, i) => {
     const lastSectionId = item.sectionIds[item.sectionIds.length - 1] || '';
     const sectionName = lastSectionId ? (sectionMap.get(lastSectionId) || '') : '';
+    const vec = vectors[i];
     return {
-      id: i,
       content: item.chunk,
       source: 'SoTayNhanVien_TDConsulting',
-      embedding: vectors[i],
-      embeddingType: 'neural' as const,
-      sectionId: lastSectionId || undefined,
-      sectionName: sectionName || undefined,
+      embedding: vec ? `[${vec.join(',')}]` : null, // Chuyển vector thành chuỗi cho pgvector
+      embedding_type: 'neural',
+      section_id: lastSectionId || null,
+      section_name: sectionName || null,
     };
-  });
+  }).filter(row => row.embedding !== null); // Loại bỏ chunk lỗi
 
-  const outPath = getEmbeddingsJsonPath();
-  fs.writeFileSync(outPath, JSON.stringify(embedded), 'utf-8');
+  // Delete old chunks before inserting new ones to avoid duplicate old data
+  const { error: delError } = await supabaseAdmin.from('document_chunks').delete().neq('id', 0); // Delete all rows
+  if (delError) {
+    console.error('[Reembed] Lỗi xóa chunks cũ:', delError);
+  } else {
+    console.log('[Reembed] ✅ Deleted old chunks');
+  }
 
-  // Copy JSON sang public/ để persist qua deploy
-  try {
-    const publicJson = path.join(process.cwd(), 'public', 'embeddings-data.json');
-    fs.writeFileSync(publicJson, JSON.stringify(embedded), 'utf-8');
-  } catch { /* Vercel read-only */ }
+  // Bulk insert, có thể chia nhỏ batch nếu mảng quá lớn
+  const BATCH_INSERT_SIZE = 100;
+  for (let i = 0; i < dbRows.length; i += BATCH_INSERT_SIZE) {
+    const batch = dbRows.slice(i, i + BATCH_INSERT_SIZE);
+    const { error } = await supabaseAdmin.from('document_chunks').insert(batch);
+    if (error) {
+      console.error('[Reembed] Lỗi chèn chunk vào DB:', error);
+      throw new Error('Lỗi chèn dữ liệu vector vào database');
+    }
+  }
 
-  console.log(`[Reembed] ✅ Saved ${embedded.length} chunks -> ${outPath}`);
+  console.log(`[Reembed] ✅ Saved ${dbRows.length} chunks to Database`);
 
-  // -- Bóc tách Outline từ sectionMap và lưu vào page-mapping.json --
-  const existingOutline = loadOutlineItems();
+  // -- Bóc tách Outline từ sectionMap và lưu vào Database --
+  const existingOutline = await loadOutlineItems();
   const existingMap = new Map<string, OutlineItem>();
   existingOutline.forEach(item => existingMap.set(item.text.trim().toLowerCase(), item));
 
   const newOutline: OutlineItem[] = [];
   let secIdx = 1;
+  let lastKnownPage = 1;
+  
   sectionMap.forEach((name, id) => {
     const cleanName = name.trim();
     if (!cleanName) return;
     const lowerName = cleanName.toLowerCase();
     
-    // Nếu section này đã có trong file cấu hình, giữ nguyên page number của nó
+    let page = lastKnownPage;
     if (existingMap.has(lowerName)) {
-      newOutline.push(existingMap.get(lowerName)!);
-    } else {
-      // Nếu là section mới, gán page = 1 (admin sẽ tự sửa sau)
-      newOutline.push({
-        id: `sec-${secIdx}`,
-        text: cleanName,
-        level: cleanName.startsWith('PHẦN') ? 1 : 2,
-        page: 1
-      });
+      page = existingMap.get(lowerName)!.page;
     }
+    
+    lastKnownPage = page;
+
+    newOutline.push({
+      id: `sec-${secIdx}`,
+      text: cleanName,
+      level: cleanName.startsWith('PHẦN') ? 1 : 2,
+      page: page
+    });
     secIdx++;
   });
 
   if (newOutline.length > 0) {
-    saveOutlineItems(newOutline);
-    console.log(`[Reembed] ✅ Saved ${newOutline.length} items to page-mapping.json`);
+    await saveOutlineItems(newOutline);
+    console.log(`[Reembed] ✅ Saved ${newOutline.length} items to Outline DB`);
   }
 
   return {
-    chunks: embedded.length,
+    chunks: dbRows.length,
     dim: vectors[0]?.length || 0,
-    file: outPath,
   };
 }

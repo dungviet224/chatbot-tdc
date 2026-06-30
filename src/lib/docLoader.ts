@@ -1,129 +1,80 @@
-import path from 'path';
-import fs from 'fs';
-import {
-  EmbeddedChunk,
-  getEmbedding,
-  retrieveByEmbedding,
-} from './embeddings';
-import { getEmbeddingsJsonPath } from './file-store';
+import { EmbeddedChunk, getEmbedding } from './embeddings';
+import { supabaseAdmin } from './supabase';
 
 export type { EmbeddedChunk };
 
-// In-memory cache
-let cachedEmbeddedChunks: EmbeddedChunk[] | null = null;
-
-// Precomputed data path (use writable dir)
-const DATA_FILE = getEmbeddingsJsonPath();
-
-export function getCachedChunks(): EmbeddedChunk[] | null {
-  return cachedEmbeddedChunks;
-}
-
-export function getEmbeddingStatus() {
-  if (!cachedEmbeddedChunks) {
-    const precomputed = loadEmbeddingData();
-    if (precomputed) {
-      cachedEmbeddedChunks = precomputed;
-    }
-  }
-  if (!cachedEmbeddedChunks) return { ready: false, totalChunks: 0 };
-  return {
-    ready: true,
-    totalChunks: cachedEmbeddedChunks.length,
-  };
-}
-
-// Cập nhật cache — gọi sau khi admin upload file mới
-export function updateCache(chunks: EmbeddedChunk[]) {
-  cachedEmbeddedChunks = chunks;
-  console.log(`[DocLoader] Cache updated: ${chunks.length} chunks`);
-}
-
-// Load embedding data từ file JSON (đã precompute)
-function loadEmbeddingData(): EmbeddedChunk[] | null {
+export async function getEmbeddingStatus() {
   try {
-    // Ưu tiên writable dir (/tmp trên Vercel)
-    const writablePath = getEmbeddingsJsonPath();
-    if (fs.existsSync(writablePath)) {
-      const raw = fs.readFileSync(writablePath, 'utf-8');
-      const data = JSON.parse(raw);
-      if (Array.isArray(data) && data.length > 0 && data[0].embedding) {
-        console.log(`[DocLoader] ✅ Loaded ${data.length} chunks from writable dir`);
-        return data;
-      }
-    }
+    // Đếm tổng số chunks trong database
+    const { count, error } = await supabaseAdmin
+      .from('document_chunks')
+      .select('*', { count: 'exact', head: true });
 
-    // Fallback public/ (committed trong git, tồn tại sau deploy)
-    const publicPath = path.join(process.cwd(), 'public', 'embeddings-data.json');
-    if (fs.existsSync(publicPath)) {
-      const raw = fs.readFileSync(publicPath, 'utf-8');
-      const data = JSON.parse(raw);
-      if (Array.isArray(data) && data.length > 0 && data[0].embedding) {
-        console.log(`[DocLoader] ✅ Loaded ${data.length} chunks from public/`);
-        return data;
-      }
-    }
+    if (error) throw error;
 
-    return null;
+    return {
+      ready: (count || 0) > 0,
+      totalChunks: count || 0,
+    };
   } catch (e) {
-    console.warn('[DocLoader] Load precomputed data fail:', e);
-    return null;
+    console.error('[DocLoader] Lỗi lấy status:', e);
+    return { ready: false, totalChunks: 0 };
   }
 }
 
-// Main: Load từ JSON (cực nhanh, ko gọi API)
-export async function loadAndEmbedDocument(): Promise<{
-  chunks: EmbeddedChunk[];
-  totalChunks: number;
-}> {
-  if (cachedEmbeddedChunks) {
-    return {
-      chunks: cachedEmbeddedChunks,
-      totalChunks: cachedEmbeddedChunks.length,
-    };
-  }
-
-  const precomputed = loadEmbeddingData();
-  if (precomputed) {
-    cachedEmbeddedChunks = precomputed;
-    return {
-      chunks: cachedEmbeddedChunks,
-      totalChunks: cachedEmbeddedChunks.length,
-    };
-  }
-
-  throw new Error('Không tìm thấy file embeddings-data.json. Chạy `node scripts/precompute-embeddings.js` trước.');
+// Hàm này hiện tại không cần nữa do không dùng in-memory cache
+export function updateCache(chunks: EmbeddedChunk[]) {
+  console.log(`[DocLoader] Cache update ignored (using Supabase pgvector now)`);
 }
 
-// Retrieve bằng semantic embedding
+// Retrieve bằng semantic embedding qua pgvector RPC
 export async function retrieveRelevantChunks(
   query: string,
   topK = 8
 ): Promise<EmbeddedChunk[]> {
-  if (!cachedEmbeddedChunks || cachedEmbeddedChunks.length === 0) {
-    await loadAndEmbedDocument();
-  }
-
-  const chunks = cachedEmbeddedChunks!;
-
   const queryVec = await getEmbedding(query);
+  
   if (!queryVec) {
-    console.warn('[Retrieval] Không embed được query, trả top 3 default');
-    return chunks.slice(0, 3);
+    console.warn('[Retrieval] Không embed được query, trả về rỗng');
+    // Nếu không có query vector, fallback lấy đại vài dòng đầu (chống lỗi)
+    const { data } = await supabaseAdmin.from('document_chunks').select('*').limit(3);
+    return data || [];
   }
 
-  let results = retrieveByEmbedding(queryVec, chunks, topK, 0.3);
+  // Chuyển vector thành format chuỗi `[0.1, 0.2, ...]` để truyền vào RPC
+  const vectorStr = `[${queryVec.join(',')}]`;
 
-  if (results.length < 3) {
+  let { data: results, error } = await supabaseAdmin.rpc('match_document_chunks', {
+    query_embedding: vectorStr,
+    match_threshold: 0.3,
+    match_count: topK
+  });
+
+  if (error) {
+    console.error('[Retrieval] Lỗi query pgvector:', error);
+    return [];
+  }
+
+  if (!results || results.length < 3) {
     console.log('[Retrieval] Low results, retry threshold 0.15');
-    results = retrieveByEmbedding(queryVec, chunks, topK, 0.15);
-  }
-
-  if (results.length === 0) {
-    console.log('[Retrieval] Không tìm thấy, dùng top 3');
-    return chunks.slice(0, 3);
+    const { data: fallbackResults } = await supabaseAdmin.rpc('match_document_chunks', {
+      query_embedding: vectorStr,
+      match_threshold: 0.15,
+      match_count: topK
+    });
+    results = fallbackResults || results || [];
   }
 
   console.log(`[Retrieval] ${results.length} chunks cho: "${query.substring(0, 40)}"`);
-  return results;
+
+  // Map lại cấu trúc cho khớp với code cũ
+  return results.map((r: any) => ({
+    id: r.id,
+    content: r.content,
+    source: r.source,
+    embedding: [], // không cần trả về vector thật cho frontend/AI đỡ tốn băng thông
+    embeddingType: 'neural',
+    sectionId: r.section_id,
+    sectionName: r.section_name
+  }));
 }

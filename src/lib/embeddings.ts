@@ -3,11 +3,6 @@
  * Gọi API /v1/embeddings batch với model openrouter/openai/text-embedding-3-large
  */
 
-const API_BASE = process.env.EMBED_API_BASE || 'http://mbasic8.pikamc.vn:25246/v1';
-const API_KEY = process.env.EMBED_API_KEY || 'sk-987312a0a1689afc-m1wrjj-666571e0';
-const EMBED_MODEL = process.env.EMBED_MODEL || 'openrouter/openai/text-embedding-3-large';
-const BATCH_SIZE = 20;
-
 export interface EmbeddedChunk {
   id: number;
   content: string;
@@ -19,24 +14,18 @@ export interface EmbeddedChunk {
 }
 
 // ========================
-//  Cosine Similarity
-// ========================
-export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return 0;
-  let dot = 0, normA = 0, normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  const denom = Math.sqrt(normA) * Math.sqrt(normB);
-  return denom === 0 ? 0 : dot / denom;
-}
-
-// ========================
-//  Embedding via API
+//  Embedding via API (timeout 12s, có retry)
 // ========================
 async function callEmbedAPI(texts: string[]): Promise<number[][] | null> {
+  const API_BASE = process.env.EMBED_API_BASE || 'http://mbasic8.pikamc.vn:25246/v1';
+  const API_KEY = process.env.EMBED_API_KEY;
+  const EMBED_MODEL = process.env.EMBED_MODEL || 'openrouter/openai/text-embedding-3-large';
+
+  if (!API_KEY) {
+    console.warn('[Embedding] Thiếu EMBED_API_KEY trong biến môi trường');
+    return null;
+  }
+
   try {
     const res = await fetch(`${API_BASE}/embeddings`, {
       method: 'POST',
@@ -48,7 +37,7 @@ async function callEmbedAPI(texts: string[]): Promise<number[][] | null> {
         model: EMBED_MODEL,
         input: texts.map(t => t.slice(0, 8000)),
       }),
-      signal: AbortSignal.timeout(120000),
+      signal: AbortSignal.timeout(12000), // 12s timeout
     });
 
     if (!res.ok) {
@@ -72,23 +61,38 @@ async function callEmbedAPI(texts: string[]): Promise<number[][] | null> {
   }
 }
 
+/** Gọi API với retry + exponential backoff (tối đa 2 lần thử lại) */
+async function callEmbedAPIWithRetry(texts: string[], retries = 2): Promise<number[][] | null> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const result = await callEmbedAPI(texts);
+    if (result) return result;
+    if (attempt < retries) {
+      const delay = 500 * (attempt + 1); // 500ms, 1000ms
+      console.warn(`[Embedding] Retry ${attempt + 1}/${retries} sau ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  return null;
+}
+
 export async function getEmbedding(text: string): Promise<number[] | null> {
-  const result = await callEmbedAPI([text]);
+  const result = await callEmbedAPIWithRetry([text]);
   return result?.[0] ?? null;
 }
 
 export async function getEmbeddingBatch(texts: string[]): Promise<(number[] | null)[]> {
   const result: (number[] | null)[] = [];
+  const BATCH_SIZE = 20;
 
   for (let i = 0; i < texts.length; i += BATCH_SIZE) {
     const batch = texts.slice(i, i + BATCH_SIZE);
-    const embeddings = await callEmbedAPI(batch);
+    const embeddings = await callEmbedAPIWithRetry(batch);
     if (embeddings) {
       result.push(...embeddings);
     } else {
       console.warn('[Embedding] Batch fail, fallback sequential');
       for (const t of batch) {
-        const v = await callEmbedAPI([t]);
+        const v = await callEmbedAPIWithRetry([t]);
         result.push(v?.[0] ?? null);
       }
     }
@@ -96,22 +100,4 @@ export async function getEmbeddingBatch(texts: string[]): Promise<(number[] | nu
   }
 
   return result;
-}
-
-// ========================
-//  Retrieve top-K chunks
-// ========================
-export function retrieveByEmbedding(
-  queryVec: number[],
-  chunks: EmbeddedChunk[],
-  topK = 5,
-  minScore = 0.3
-): EmbeddedChunk[] {
-  const scored = chunks
-    .map((c) => ({ chunk: c, score: cosineSimilarity(queryVec, c.embedding) }))
-    .filter((s) => s.score >= minScore)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
-
-  return scored.map((s) => s.chunk);
 }

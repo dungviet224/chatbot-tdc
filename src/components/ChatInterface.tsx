@@ -62,6 +62,7 @@ function formatMessage(content: string): string {
   const lines = content.split('\n');
   const output: string[] = [];
   const listBuffer: string[] = [];
+  const tableBuffer: string[] = [];
 
   function flushList() {
     if (listBuffer.length === 0) return;
@@ -69,28 +70,101 @@ function formatMessage(content: string): string {
     listBuffer.length = 0;
   }
 
+  function flushTable() {
+    if (tableBuffer.length === 0) return;
+    
+    let html = '<div class="msg-table-wrapper"><table class="msg-table">';
+    for (let i = 0; i < tableBuffer.length; i++) {
+      let row = tableBuffer[i].trim();
+      if (!row) continue;
+      
+      // Bỏ qua dòng separator dạng |---|---|
+      if (/^\|?[\s\-\:]+\|?$/.test(row.replace(/\|/g, ''))) continue;
+      
+      const cells = row.split('|').map(c => c.trim());
+      if (cells[0] === '') cells.shift();
+      if (cells.length > 0 && cells[cells.length - 1] === '') cells.pop();
+      
+      html += '<tr>';
+      for (const cell of cells) {
+        const cellContent = applyInline(cell);
+        if (i === 0) {
+          html += `<th>${cellContent}</th>`;
+        } else {
+          html += `<td>${cellContent}</td>`;
+        }
+      }
+      html += '</tr>';
+    }
+    html += '</table></div>';
+    
+    output.push(html);
+    tableBuffer.length = 0;
+  }
+
+  function flushAll() {
+    flushList();
+    flushTable();
+  }
+
   for (const line of lines) {
     const trimmed = line.trim();
     const listMatch = trimmed.match(/^[-•]\s+(.+)/);
     if (listMatch) {
+      flushTable();
       listBuffer.push(`<li>${applyInline(listMatch[1])}</li>`);
       continue;
     }
-    if (trimmed === '') {
+
+    if (trimmed.startsWith('|')) {
       flushList();
+      tableBuffer.push(trimmed);
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)/);
+    if (headingMatch) {
+      flushAll();
+      const level = headingMatch[1].length;
+      // Chat headings don't need to be massive, so we map them to smaller font-weight sizes
+      // level 1,2 -> big, level 3,4 -> medium
+      const cls = level <= 2 ? 'msg-h2' : 'msg-h3';
+      output.push(`<div class="msg-heading ${cls}">${applyInline(headingMatch[2])}</div>`);
+      continue;
+    }
+
+    const highlightMatch = trimmed.match(/^---\s*(.+?)\s*---$/);
+    if (highlightMatch) {
+      flushAll();
+      output.push(`<div class="msg-highlight">${applyInline(highlightMatch[1])}</div>`);
+      continue;
+    }
+
+    if (/^---+$/.test(trimmed)) {
+      flushAll();
+      output.push(`<hr class="msg-divider" />`);
+      continue;
+    }
+    
+    if (trimmed === '') {
+      flushAll();
       if (output.length > 0 && output[output.length - 1] !== '<br/>') {
         output.push('<br/>');
       }
       continue;
     }
-    flushList();
+    flushAll();
     output.push(`<span>${applyInline(trimmed)}</span><br/>`);
   }
 
-  flushList();
-  while (output.length > 0 && output[0] === '<br/>') output.shift();
-  while (output.length > 0 && output[output.length - 1] === '<br/>') output.pop();
-  return output.join('').replace(/<br\/>(<ul)/g, '$1');
+  flushAll();
+  let htmlString = output.join('');
+  
+  // Xóa bỏ các thẻ <br/> dư thừa nằm sát các block elements
+  htmlString = htmlString.replace(/(?:<br\/>\s*)+(<hr|<div|<ul)/gi, '$1');
+  htmlString = htmlString.replace(/(<\/div>|<\/ul>|<hr[^>]*>)\s*(?:<br\/>)+/gi, '$1');
+  
+  return htmlString;
 }
 
 /** Shorten section name for badge display */
@@ -104,7 +178,7 @@ function shortName(name: string): string {
 }
 
 /** Source badges: pill tags with section name at end of message */
-function renderSourceBadges(sources: { sectionId: string; sectionName: string; pageNum?: number }[]): string {
+function renderSourceBadges(sources: { sectionId: string; sectionName: string; pageNum?: number }[], docViewerUrl: string = ''): string {
   const seen = new Set<string>();
   const unique = sources.filter(s => {
     const key = s.sectionName.trim();
@@ -120,7 +194,8 @@ function renderSourceBadges(sources: { sectionId: string; sectionName: string; p
 
   return `<span class="msg-sources-inline">${show.map(s => {
     const pageNum = s.pageNum || 1;
-    return `<a href="/sotaynhanvien.pdf#page=${pageNum}" target="_blank" rel="noopener noreferrer" class="source-badge" title="${s.sectionName} (Tr.${pageNum})">${shortName(s.sectionName)}</a>`;
+    const url = docViewerUrl ? `${docViewerUrl}#page=${pageNum}` : `/sotaynhanvien.pdf#page=${pageNum}`;
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="source-badge" title="${s.sectionName} (Tr.${pageNum})">${shortName(s.sectionName)}</a>`;
   }).join('')}${extra > 0 ? `<span class="source-badge source-badge-more" title="${unique.slice(MAX).map(s => s.sectionName).join(' • ')}">+${extra}</span>` : ''}</span>`;
 }
 
@@ -129,7 +204,7 @@ function escapeRegExp(string: string) {
 }
 
 /** Format message + inline page icons when sources span multiple pages */
-function formatMessageWithSources(content: string, sources?: { id?: string; sectionId: string; sectionName: string; tag?: string; pageNum?: number }[]): string {
+function formatMessageWithSources(content: string, sources?: { id?: string; sectionId: string; sectionName: string; tag?: string; pageNum?: number }[], docViewerUrl: string = ''): string {
   if (!sources || sources.length === 0) return formatMessage(content);
 
   let html = formatMessage(content);
@@ -140,10 +215,10 @@ function formatMessageWithSources(content: string, sources?: { id?: string; sect
       if (!src.tag) continue;
       
       const tagRegex = new RegExp(escapeRegExp(src.tag), 'gi');
-      const anchor = src.sectionId ? `#${src.sectionId}` : '';
       const pageNum = src.pageNum || 1;
+      const url = docViewerUrl ? `${docViewerUrl}#page=${pageNum}` : `/sotaynhanvien.pdf#page=${pageNum}`;
       const displayTag = src.tag.replace(/^\[|\]$/g, '');
-      const badgeHtml = `<a href="/sotaynhanvien.pdf#page=${pageNum}" target="_blank" rel="noopener noreferrer" class="msg-inline-badge" title="${src.sectionName} (Tr.${pageNum})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${displayTag}</a>`;
+      const badgeHtml = `<a href="${url}" target="_blank" rel="noopener noreferrer" class="msg-inline-badge" title="${src.sectionName} (Tr.${pageNum})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${displayTag}</a>`;
       
       html = html.replace(tagRegex, badgeHtml);
     }
@@ -153,8 +228,9 @@ function formatMessageWithSources(content: string, sources?: { id?: string; sect
       const src = sources.find(s => s.id === p1);
       if (src) {
         const pageNum = src.pageNum || 1;
+        const url = docViewerUrl ? `${docViewerUrl}#page=${pageNum}` : `/sotaynhanvien.pdf#page=${pageNum}`;
         const displayTag = src.tag ? src.tag.replace(/^\[|\]$/g, '') : shortName(src.sectionName);
-        return `<a href="/sotaynhanvien.pdf#page=${pageNum}" target="_blank" rel="noopener noreferrer" class="msg-inline-badge" title="${src.sectionName} (Tr.${pageNum})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${displayTag}</a>`;
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="msg-inline-badge" title="${src.sectionName} (Tr.${pageNum})"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>${displayTag}</a>`;
       }
       return match;
     });
@@ -180,7 +256,7 @@ export default function ChatInterface() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesRef = useRef<Message[]>([]);
   const liveRegionRef = useRef<HTMLDivElement>(null);
-  const docViewerUrlRef = useRef('https://docs.google.com/viewer?embedded=true&url=');
+  const docViewerUrlRef = useRef('');
   messagesRef.current = messages;
 
   // ── Scroll to bottom ──
@@ -195,6 +271,9 @@ export default function ChatInterface() {
       .then((data) => {
         if (data.success) {
           setIsInitialized(true);
+          if (data.docViewerUrl) {
+            docViewerUrlRef.current = data.docViewerUrl;
+          }
           setMessages([
             {
               id: 'welcome',
@@ -271,7 +350,7 @@ export default function ChatInterface() {
         let clientBuffer = '';
         let isDone = false;
         let lastSources: { id?: string; sectionId: string; sectionName: string; tag?: string }[] = [];
-        let docViewerUrl = 'https://docs.google.com/viewer?url=';
+        let docViewerUrl = '';
 
         while (!isDone) {
           const { done, value } = await reader.read();
@@ -297,12 +376,7 @@ export default function ChatInterface() {
               }
               if (parsed.docViewerUrl) {
                 // Nếu đang ở localhost, bypass Google Viewer để tải trực tiếp file thay vì hiển thị lỗi
-                const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-                if (isLocal) {
-                  docViewerUrlRef.current = '/api/doc/serve-docx';
-                } else {
-                  docViewerUrlRef.current = parsed.docViewerUrl;
-                }
+                docViewerUrlRef.current = parsed.docViewerUrl;
                 docViewerUrl = parsed.docViewerUrl;
               }
             } catch { /* skip */ }
@@ -444,7 +518,7 @@ export default function ChatInterface() {
                 <div
                   className="msg-text"
                   dangerouslySetInnerHTML={{
-                    __html: formatMessageWithSources(msg.content, msg.sources),
+                    __html: formatMessageWithSources(msg.content, msg.sources, docViewerUrlRef.current),
                   }}
                 />
               ) : (

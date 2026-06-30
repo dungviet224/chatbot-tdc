@@ -1,18 +1,34 @@
 /**
- * Build-time script: extract DOCX → chunk → call API embedding → save JSON
- * Output: public/embeddings-data.json (commit to git, Vercel reads it)
- * Chạy: node scripts/precompute-embeddings.js
+ * Build-time script: extract DOCX → chunk → call API embedding → insert to Supabase pgvector
+ * Output: Postgres `document_chunks` table
+ * Run: node scripts/precompute-embeddings.js
  */
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const http = require('http');
 
-const ROOT = path.resolve(__dirname, '..'); // project root (chatbot-tdc/)
+// Bắt buộc nạp biến môi trường nếu chạy local
+require('dotenv').config({ path: '.env.local' });
+
+const { createClient } = require('@supabase/supabase-js');
+
+const ROOT = path.resolve(__dirname, '..'); // project root
 
 const API_BASE = process.env.EMBED_API_BASE || 'http://mbasic8.pikamc.vn:25246/v1';
 const API_KEY = process.env.EMBED_API_KEY || 'sk-987312a0a1689afc-m1wrjj-666571e0';
 const EMBED_MODEL = process.env.EMBED_MODEL || 'openrouter/openai/text-embedding-3-large';
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+  process.exit(1);
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 const BATCH_SIZE = 20;
 
 function fetchJSON(url, data) {
@@ -65,7 +81,6 @@ function chunkText(fullText, maxSize = 450, overlap = 80) {
   for (const line of lines) {
     const t = line.trim();
     if (!t) continue;
-    // Detect section marker: ⸻SECTION:section-X⸻
     const markerMatch = t.match(/⸻SECTION:([^⸻]+)⸻/);
     if (markerMatch) {
       if (cl.length > 0) { sections.push({ heading: h, content: cl, sectionIds: [...sids] }); cl = []; }
@@ -101,7 +116,6 @@ function chunkText(fullText, maxSize = 450, overlap = 80) {
   return result.filter(c => c.chunk.trim().length > 30).filter(c => { const k = c.chunk.substring(0, 50); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
-/** Extract section map from HTML headings */
 function extractSectionMap(html) {
   const map = new Map();
   const regex = /<h([1-6])([^>]*)id="(section-\d+)"([^>]*)>(.*?)<\/h[1-6]>/gi;
@@ -119,9 +133,13 @@ function extractSectionMap(html) {
   const mammoth = require('mammoth');
 
   const filePath = path.join(ROOT, 'public', 'sotaynhanvien.docx');
+  if (!fs.existsSync(filePath)) {
+    console.error('File public/sotaynhanvien.docx not found');
+    process.exit(1);
+  }
+
   const { value: html } = await mammoth.convertToHtml({ path: filePath });
 
-  // Add id="section-N" to headings
   let sectionIndex = 0;
   const annotatedHtml = html.replace(
     /<(h[1-6])([^>]*)>/gi,
@@ -132,10 +150,8 @@ function extractSectionMap(html) {
     }
   );
 
-  // Build sectionName map
   const sectionMap = extractSectionMap(annotatedHtml);
 
-  // Insert section markers before headings, then strip HTML
   let sectionedHtml = annotatedHtml.replace(
     /<h([1-6])([^>]*)id="(section-\d+)"([^>]*)>/gi,
     (match, _tag, _before, id, _after) => {
@@ -163,33 +179,43 @@ function extractSectionMap(html) {
   const rawChunks = chunkText(text, 450, 80);
   console.log(`[Precompute] ${rawChunks.length} chunks`);
 
-  // Embed via API
   console.log('[Precompute] Embedding via API...');
-  const embedded = [];
+  const dbRows = [];
+  
   for (let i = 0; i < rawChunks.length; i += BATCH_SIZE) {
     const batch = rawChunks.slice(i, i + BATCH_SIZE);
     const batchTexts = batch.map(c => c.chunk);
     const vecs = await callEmbedAPI(batchTexts);
+    
     for (let j = 0; j < batch.length; j++) {
       const item = rawChunks[i + j];
       const lastSectionId = item.sectionIds[item.sectionIds.length - 1] || '';
       const sectionName = lastSectionId ? (sectionMap.get(lastSectionId) || '') : '';
-      embedded.push({
-        id: i + j,
+      
+      dbRows.push({
         content: item.chunk,
         source: 'SoTayNhanVien_TDConsulting',
-        embedding: vecs[j],
-        embeddingType: 'neural',
-        sectionId: lastSectionId || undefined,
-        sectionName: sectionName || undefined,
+        embedding: `[${vecs[j].join(',')}]`,
+        embedding_type: 'neural',
+        section_id: lastSectionId || null,
+        section_name: sectionName || null,
       });
     }
     console.log(`[Precompute] Batch ${Math.min(i + BATCH_SIZE, rawChunks.length)}/${rawChunks.length}`);
   }
 
-  // Save
-  const outPath = path.join(ROOT, 'public', 'embeddings-data.json');
-  fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  fs.writeFileSync(outPath, JSON.stringify(embedded), 'utf-8');
-  console.log(`[Precompute] ✅ Saved ${embedded.length} chunks, dim=${embedded[0]?.embedding?.length} -> ${outPath}`);
+  console.log('[Precompute] Deleting old chunks from Database...');
+  await supabase.from('document_chunks').delete().neq('id', -1);
+
+  console.log('[Precompute] Inserting new chunks to Database...');
+  const BATCH_INSERT = 100;
+  for (let i = 0; i < dbRows.length; i += BATCH_INSERT) {
+    const batch = dbRows.slice(i, i + BATCH_INSERT);
+    const { error } = await supabase.from('document_chunks').insert(batch);
+    if (error) {
+      console.error('Insert Error:', error);
+    }
+  }
+
+  console.log(`[Precompute] ✅ Done. Inserted ${dbRows.length} chunks.`);
 })();

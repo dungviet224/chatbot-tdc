@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Settings, Shield, Upload, LogOut, Save, Loader2, Check, AlertCircle,
-  Key, Server, FileText, RefreshCw, Eye, EyeOff,
+  Key, Server, FileText, RefreshCw, Eye, EyeOff, UploadCloud
 } from 'lucide-react';
 
 // ── Helpers ──
@@ -208,11 +208,7 @@ function DocumentsTab({ embed, onUpload }: { embed: EmbedData; onUpload: (f: Fil
                 <span className="cfg-stat-val">
                   {embed.docUrl ? (
                     <a 
-                      href={
-                        typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-                          ? '/sotaynhanvien.pdf'
-                          : embed.docUrl
-                      } 
+                      href={embed.docUrl} 
                       target="_blank" 
                       rel="noopener noreferrer" 
                       className="cfg-doc-link"
@@ -251,30 +247,31 @@ function DocumentsTab({ embed, onUpload }: { embed: EmbedData; onUpload: (f: Fil
             className="cfg-hidden-input"
           />
           {msg && <p className={`cfg-upload-msg ${msg.startsWith('✅') ? 'cfg-msg-ok' : 'cfg-msg-err'}`}>{msg}</p>}
+        </div>
 
-          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: '1px dashed var(--color-border)' }}>
-            <p className="cfg-hint" style={{ marginBottom: '12px' }}>
-              <strong>Lưu ý quan trọng:</strong> File DOCX ở trên dùng để nạp kiến thức cho AI học. Còn file PDF dưới đây dùng để hiển thị cho nhân viên xem khi bấm vào thẻ Nguồn trích dẫn. Bạn cần upload CẢ 2 file song song mỗi khi có chính sách mới.
-            </p>
-            <label className="cfg-upload-btn" htmlFor="cfg-pdf-upload" style={{ background: 'var(--color-bg-elevated)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
-              <Upload size={18} /> Chọn file .PDF để upload hiển thị
-            </label>
-            <input
-              id="cfg-pdf-upload"
-              type="file"
-              accept=".pdf"
-              onChange={async (e) => {
-                const f = e.target.files?.[0];
-                if (!f) return;
-                const fd = new FormData(); fd.append('file', f);
+        <div className="cfg-upload-area" style={{ marginTop: '20px' }}>
+          <label className="cfg-upload-btn" htmlFor="cfg-pdf-upload">
+            <UploadCloud size={16} /> Tải lên File PDF để hiển thị
+          </label>
+          <input
+            id="cfg-pdf-upload"
+            type="file"
+            accept=".pdf"
+            onChange={async (e) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              const fd = new FormData(); fd.append('file', f);
+              try {
                 const r = await fetch('/api/cfg/upload-pdf', { method: 'POST', body: fd, credentials: 'include' });
                 const d = await r.json();
                 alert(d.success ? '✅ Tải PDF hiển thị thành công!' : '❌ Lỗi: ' + d.error);
-                e.target.value = '';
-              }}
-              className="cfg-hidden-input"
-            />
-          </div>
+              } catch (err) {
+                alert('❌ Lỗi kết nối khi tải PDF');
+              }
+              e.target.value = '';
+            }}
+            className="cfg-hidden-input"
+          />
         </div>
       </div>
     </div>

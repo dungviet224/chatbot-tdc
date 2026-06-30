@@ -27,10 +27,10 @@
   --color-border-focus: #d4227b;
 
   /* Text */
-  --color-text-primary: #1c0a13;
-  --color-text-secondary: #5a2d47;
-  --color-text-muted: #a06080;
-  --color-text-placeholder: #c090a8;
+  --color-text-primary: #111111; /* neutral dark */
+  --color-text-secondary: #333333; /* neutral gray */
+  --color-text-muted: #666666;
+  --color-text-placeholder: #999999;
   --color-text-on-brand: #ffffff;
 
   /* Shadows — soft & colored */
@@ -45,10 +45,8 @@
   --space-5: 20px; --space-6: 24px; --space-8: 32px;  --space-10: 40px; --space-12: 48px;
 
   /* Typography */
-  --font-body: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-heading: 'Outfit', 'Inter', sans-serif;
-  --text-xs: 0.6875rem;  --text-sm: 0.8125rem;  --text-base: 0.9375rem;
-  --text-md: 1rem;        --text-lg: 1.125rem;   --text-xl: 1.25rem;
+  --text-xs: 0.75rem;     --text-sm: 0.875rem;    --text-base: 0.9375rem;
+  --text-md: 1rem;        --text-lg: 1.125rem;    --text-xl: 1.25rem;
 
   /* Radius — more generous */
   --radius-sm: 8px;    --radius-md: 14px;  --radius-lg: 20px;
@@ -73,7 +71,6 @@
 html { font-size: 16px; -webkit-text-size-adjust: 100%; }
 
 body {
-  font-family: var(--font-body);
   font-size: var(--text-base);
   line-height: 1.65;
   color: var(--color-text-primary);
@@ -1075,6 +1072,80 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.msg-highlight {
+  background-color: rgba(212, 34, 123, 0.1); /* brand color with opacity */
+  color: #a3145a; /* darker brand color */
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  margin: var(--space-3) 0;
+  border-left: 4px solid var(--color-brand);
+}
+
+.msg-heading {
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-2);
+}
+
+.msg-heading.msg-h2 {
+  font-size: 1.1rem;
+}
+
+.msg-heading.msg-h3 {
+  font-size: 1rem;
+}
+
+.msg-bubble.user .msg-heading {
+  color: white;
+}
+
+.msg-bubble.user .msg-highlight {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-left-color: white;
+}
+
+.msg-divider {
+  border: 0;
+  height: 1px;
+  background: var(--color-border);
+  margin: var(--space-2) 0;
+  opacity: 0.8;
+}
+
+.msg-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  margin: var(--space-3) 0;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(212, 34, 123, 0.2);
+  background: rgba(212, 34, 123, 0.04);
+}
+
+.msg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  text-align: left;
+}
+
+.msg-table th, .msg-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid rgba(212, 34, 123, 0.15);
+}
+
+.msg-table th {
+  background-color: rgba(212, 34, 123, 0.15);
+  font-weight: 700;
+  color: #a3145a;
+}
+
+.msg-table tr:last-child td {
+  border-bottom: none;
 }
 
 @media (max-width: 599px) {
