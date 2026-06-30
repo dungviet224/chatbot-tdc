@@ -17,8 +17,8 @@ if (process.env.NODE_ENV === 'production' && (!ADMIN_USER || !ADMIN_PASS)) {
 
 export async function POST(req: NextRequest) {
   try {
-    // Dùng req.ip do Next.js cung cấp nếu chạy trên Vercel, fallback sang header
-    const ip = req.ip || req.headers.get('x-forwarded-for')?.split(',')[0].trim() || 'unknown';
+    // Dùng header x-forwarded-for (Vercel tự động cung cấp header này)
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0].trim() || 'unknown';
     
     // Brute force protection (async từ DB)
     const { allowed, remaining } = await checkLoginAttempt(ip);
