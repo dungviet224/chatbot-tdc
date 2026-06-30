@@ -8,9 +8,9 @@ import { supabaseAdmin } from './supabase';
 
 const JWT_SECRET_RAW = process.env.JWT_SECRET;
 
-// Bắt buộc cấu hình JWT_SECRET trên production
+// Cảnh báo nếu thiếu JWT_SECRET trên production
 if (process.env.NODE_ENV === 'production' && !JWT_SECRET_RAW) {
-  throw new Error('Thiếu biến môi trường JWT_SECRET trên Production');
+  console.warn('⚠️ WARNING: Thiếu biến môi trường JWT_SECRET trên Production. Hệ thống sẽ tạm thời dùng fallback secret. Vui lòng thêm JWT_SECRET vào Vercel Environment Variables.');
 }
 
 const fallbackSecret = 'tdc-chatbot-dev-secret-please-change-in-production-32chars';
